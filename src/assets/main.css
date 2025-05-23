@@ -1,0 +1,260 @@
+@charset "UTF-8";
+.page-title {
+  font-size: 2rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: #333;
+  font-family: system-ui, sans-serif;
+}
+
+.order-view {
+  font-family: system-ui, sans-serif;
+  padding: 2rem;
+}
+
+.order-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+.panel {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 1rem;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+.panel h3 {
+  background: linear-gradient(to right, #3b8d99, #6b6b83);
+  color: white;
+  padding: 0.5rem 1rem;
+  margin: -1rem -1rem 1rem -1rem;
+  border-radius: 6px 6px 0 0;
+}
+.panel.products-panel h3 {
+  background: linear-gradient(to right, #1d976c, #93f9b9);
+}
+.panel.notes-panel h3 {
+  background: linear-gradient(to right, #cc2b5e, #753a88);
+}
+.panel.totals-panel h3 {
+  background: linear-gradient(to right, #283c86, #45a247);
+}
+
+.notes-scroll {
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.note {
+  border-bottom: 1px solid #eee;
+  padding: 0.55rem 0;
+}
+.note .note-text {
+  white-space: pre-wrap;
+  margin-bottom: 0.25rem;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+.note .note-meta {
+  font-size: 0.7rem;
+  color: #555;
+}
+.note .note-meta abbr {
+  text-decoration: none;
+}
+
+.product-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.product-table th,
+.product-table td {
+  text-align: left;
+  padding: 0.75rem;
+  border-bottom: 1px solid #eee;
+  vertical-align: top;
+}
+.product-table th {
+  background: #f5f5f5;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.product-table td {
+  font-size: 0.95rem;
+}
+
+.product-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.product-image {
+  width: 48px;
+  height: 48px;
+  -o-object-fit: cover;
+     object-fit: cover;
+  border-radius: 6px;
+}
+
+.totals-list p {
+  margin: 0.4rem 0;
+  font-size: 0.95rem;
+}
+
+.orders-list {
+  padding: 2rem;
+  font-family: system-ui, sans-serif;
+}
+.orders-list .filters {
+  margin-bottom: 1rem;
+}
+.orders-list .n-data-table {
+  font-size: 0.95rem;
+}
+.orders-list .order-id {
+  font-weight: 600;
+  color: #333;
+}
+.orders-list .order-status {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  display: inline-block;
+  text-transform: capitalize;
+}
+.orders-list .order-status.processing {
+  background: #fef3c7;
+  color: #92400e;
+}
+.orders-list .order-status.completed {
+  background: #d1fae5;
+  color: #065f46;
+}
+.orders-list .order-status.pending {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+.orders-list .order-status.failed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.orders-list .order-status.on-hold {
+  background: #ede9fe;
+  color: #6b21a8;
+}
+.orders-list .breakdown-list {
+  padding-left: 1.2rem;
+  margin: 0.25rem 0 1rem;
+  list-style: disc;
+  font-size: 0.95rem;
+}
+
+/* === Warehouse & Export tags (copied from WP-Admin) ============== */
+.warehouse-export-tag,
+.warehouse-export-status-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 0.85rem;
+  border-radius: 4px;
+  color: #fff;
+  text-transform: capitalize;
+}
+
+/* Generic / default */
+.warehouse-export-pending {
+  background: #9e9e9e;
+}
+
+.warehouse-export-exported {
+  background: #4caf50;
+}
+
+.warehouse-export-failed {
+  background: #f44336;
+}
+
+.warehouse-export-none {
+  background: #ccc;
+  color: #000;
+}
+
+.warehouse-export-shipstation {
+  background: #9e9e9e;
+}
+
+.warehouse-export-shipstation.warehouse-export-exported {
+  background: #0c5b36;
+}
+
+.warehouse-shipbob.warehouse-export-exported {
+  background: #0073aa;
+}
+
+.warehouse-fulfillrite.warehouse-export-exported {
+  background: #e70358;
+}
+
+.warehouse-klbglobal.warehouse-export-exported {
+  background: #e66e50;
+}
+
+.warehouse-green.warehouse-export-exported {
+  background: #009688;
+}
+
+.warehouse-export-status-pending {
+  background: #9e9e9e;
+}
+
+.warehouse-export-status-failed {
+  background: #f44336;
+}
+
+.warehouse-export-status-exported {
+  background: #4caf50;
+}
+
+.warehouse-export-status-shipped {
+  background: #2196f3;
+}
+
+/* Address-validation tags – same palette as the WP admin plugin */
+.address-validation-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 0.85rem;
+  border-radius: 4px;
+  color: #fff;
+  text-transform: capitalize;
+}
+
+.address-validation-status-pending-validation {
+  background: #9e9e9e;
+} /* gray */
+.address-validation-status-invalid {
+  background: #e91e63;
+} /* pink/red */
+.address-validation-status-valid {
+  background: #4caf50;
+} /* green */
+.address-validation-status-unavailable {
+  background: #c5bd7a;
+} /* khaki */
+.address-validation-status-not-validated {
+  background: #cccccc;
+} /* light gray */
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+}
+
+.filter-field .n-select {
+  margin-top: 2px;
+}/*# sourceMappingURL=main.css.map */
