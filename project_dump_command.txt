@@ -1,0 +1,72 @@
+﻿$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$logPath = ".\project_dump.txt"
+$rootPath = Get-Location
+
+# Start fresh with root folder name
+Set-Content -Path $logPath -Value "Project structure:`n📁 $($rootPath.Name)" -Encoding UTF8
+
+function Write-Tree {
+    param (
+        [string]$path,
+        [string]$prefix = ""
+    )
+
+    $entries = Get-ChildItem $path | Where-Object {
+        $_.Name -notin @("node_modules", ".git", "package-lock.json", ".gitignore") -and
+        $_.Extension -notin @(".txt", ".map")
+    }
+
+    for ($i = 0; $i -lt $entries.Count; $i++) {
+        $entry = $entries[$i]
+        $connector = if ($i -eq $entries.Count - 1) { "└──" } else { "├──" }
+        $line = "$prefix$connector $($entry.Name)"
+        Add-Content -Path $logPath -Value $line -Encoding UTF8
+
+        if ($entry.PSIsContainer) {
+            Write-Tree -path $entry.FullName -prefix "$prefix$(if ($i -eq $entries.Count - 1) { "    " } else { "│   " })"
+        }
+    }
+}
+
+Write-Tree -path $rootPath.FullName
+
+Add-Content -Path $logPath -Value "`n------------------------------" -Encoding UTF8
+
+function Should-PrintContent {
+    param ([string]$filePath)
+
+    if ($filePath -like "*node_modules*") { return $false }
+    if ($filePath -like "*.css" -or $filePath -like "*.scss") { return $false }
+    if ($filePath -like "*.txt") { return $false }
+    if ($filePath -like "*.map") { return $false }
+    if ($filePath -like "*\.git*") { return $false }
+    if ($filePath -like "*my_log.txt") { return $false }
+    if ($filePath -like "*package-lock.json") { return $false }
+    if ($filePath -like "*.gitignore") { return $false }
+
+    return $true
+}
+
+Get-ChildItem -Recurse -File | Where-Object {
+    $_.FullName -notlike "*node_modules*" -and
+    $_.FullName -notlike "*\.git*" -and
+    $_.Name -notmatch "\.(txt|map)$" -and
+    $_.Name -ne "package-lock.json" -and
+    $_.Name -ne ".gitignore"
+} | ForEach-Object {
+    $filePath = $_.FullName
+    $relativePath = $filePath.Replace($rootPath.Path, "").TrimStart("\", "/")
+
+    Add-Content -Path $logPath -Value "------------------------------" -Encoding UTF8
+    Add-Content -Path $logPath -Value "$($rootPath.Name)\$relativePath" -Encoding UTF8
+    Add-Content -Path $logPath -Value "------------------------------" -Encoding UTF8
+
+    if (Should-PrintContent -filePath $filePath) {
+        $content = Get-Content $filePath -Encoding UTF8
+        Add-Content -Path $logPath -Value $content -Encoding UTF8
+    } else {
+        Add-Content -Path $logPath -Value "[Content skipped]" -Encoding UTF8
+    }
+
+    Add-Content -Path $logPath -Value "`n" -Encoding UTF8
+}

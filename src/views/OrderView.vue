@@ -1,9 +1,21 @@
 <template>
     <div class="order-view">
-        <div class="page-title">Order #{{ route.params.id }}</div>
+        <div class="page-title">Order #{{ props.id }}</div>
         <n-button @click="router.back()">← Back to Orders</n-button>
 
         <div class="order-grid">
+            <!-- Order Info Panel -->
+            <div class="panel order-info-panel">
+                <h3>Order Info</h3>
+                <n-skeleton v-if="loadingOrder" text :repeat="1" />
+                <div v-else>
+                    <p>
+                        <strong>Created At:</strong>
+                        {{ formattedCreatedDate }}
+                    </p>
+                    <p><strong>New/Returning:</strong> {{ newOrReturning }}</p>
+                </div>
+            </div>
             <!-- Customer Info Panel -->
             <div class="panel info-panel">
                 <h3>Customer Info</h3>
@@ -12,7 +24,6 @@
                     <p><strong>Name:</strong> {{ order.billing?.first_name }} {{ order.billing?.last_name }}</p>
                     <p><strong>Email:</strong> {{ order.billing?.email }}</p>
                     <p><strong>Phone:</strong> {{ order.billing?.phone }}</p>
-                    <p><strong>New/Returning:</strong> {{ newOrReturning }}</p>
                     <p>
                         <strong>Address:</strong><br />
                         {{ order.billing?.address_1 }}<br />
@@ -47,9 +58,9 @@
                                     </div>
                                 </div>
                             </td>
-                            <td>${{ item.price }}</td>
+                            <td>${{ (item.subtotal / item.quantity).toFixed(2) }}</td>
                             <td>{{ item.quantity }}</td>
-                            <td>${{ item.total }}</td>
+                            <td>${{ Number(item.total).toFixed(2) }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -114,12 +125,14 @@
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { apiBase, authHeader } from "@/utils/api";
+import { apiBase,apiBaseCustom, authHeader } from "@/utils/api";
+import { formatOrderDate } from "@/utils/utils";
 
 const route = useRoute();
 const router = useRouter();
 
 const order = ref({});
+
 const orderNotes = ref([]);
 const loadingOrder = ref(true);
 const loadingNotes = ref(true);
@@ -130,16 +143,6 @@ const newOrReturning = computed(() => {
     return field?.value || "—";
 });
 
-const sumFees = computed(() => {
-    return (
-        order.value?.fee_lines
-            ?.reduce((sum, fee) => {
-                return sum + parseFloat(fee.total || 0);
-            }, 0)
-            .toFixed(2) || "0.00"
-    );
-});
-
 const subtotal = computed(() => {
     if (!order.value?.line_items) return "—";
     const sum = order.value.line_items.reduce((total, item) => {
@@ -148,14 +151,32 @@ const subtotal = computed(() => {
     return sum.toFixed(2);
 });
 
+const formattedCreatedDate = computed(() => {
+    const raw = order.value?.date_created.date || "";
+    return formatOrderDate(raw, true);
+});
+
+
+
+
+
+
+
+
+const props = defineProps({
+    id: String,
+});
+
 const fetchOrder = async () => {
     loadingOrder.value = true;
     order.value = {};
     try {
-        const res = await fetch(`${apiBase}/orders/${route.params.id}`, {
+        const res = await fetch(`${apiBaseCustom}/orders/${props.id}`, {
             headers: { Authorization: authHeader },
         });
         order.value = await res.json();
+        console.log("Fetched order object 🕵️:", order.value);
+        console.log("order.value.line_items", order.value.line_items);
     } finally {
         loadingOrder.value = false;
     }
@@ -165,7 +186,7 @@ const fetchNotes = async () => {
     loadingNotes.value = true;
     orderNotes.value = [];
     try {
-        const res = await fetch(`${apiBase}/orders/${route.params.id}/notes`, {
+        const res = await fetch(`${apiBase}/orders/${props.id}/notes`, {
             headers: { Authorization: authHeader },
         });
         const notes = await res.json();
@@ -186,7 +207,7 @@ onMounted(() => {
 
 // Reload on route param change
 watch(
-    () => route.params.id,
+    () => props.id,
     () => {
         loadOrderData();
     }

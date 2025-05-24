@@ -21,6 +21,15 @@
                 <n-text depth="3">Addr. Validation</n-text>
                 <n-select v-model:value="selectedAddrStatus" :options="addrStatusOptions" placeholder="All" clearable />
             </div>
+
+            <div class="filter-field">
+                <n-text depth="3">Date</n-text>
+                <n-dropdown trigger="click" :options="dateRangeOptions" @select="handleDateFilter">
+                    <n-button style="justify-content: flex-start; width: 150px">
+                        {{ selectedDateLabel }}
+                    </n-button>
+                </n-dropdown>
+            </div>
         </n-space>
 
         <n-space vertical size="large">
@@ -34,10 +43,14 @@
 </template>
 
 <script setup>
-import { ref, watch, watchEffect, h } from "vue";
+import { ref, watchEffect, h } from "vue";
 import { NButton, NTag, useMessage } from "naive-ui";
 import { useRouter, useRoute } from "vue-router";
 import { apiBaseCustom, authHeader } from "@/utils/api";
+import Datepicker from "@vuepic/vue-datepicker";
+import "@vuepic/vue-datepicker/dist/main.css";
+import { computed } from "vue";
+import { formatOrderDate } from "@/utils/utils";
 
 const orders = ref([]);
 
@@ -60,7 +73,6 @@ const selectedWarehouse = ref(route.query.warehouse ?? null);
 const selectedExportStatus = ref(route.query.export_status ?? null);
 const selectedAddrStatus = ref(route.query.addr_status ?? null);
 
-// ✅ Safe and proper
 watchEffect(() => {
     router.replace({
         path: "/orders",
@@ -70,6 +82,8 @@ watchEffect(() => {
             warehouse: selectedWarehouse.value || undefined,
             export_status: selectedExportStatus.value || undefined,
             addr_status: selectedAddrStatus.value || undefined,
+            date_from: route.query.date_from || undefined,
+            date_to: route.query.date_to || undefined,
         },
     });
 
@@ -98,24 +112,12 @@ const columns = [
             ]);
         },
     },
-    {
-        title: "Items",
-        key: "item_count",
-        render(row) {
-            return row.line_items?.length || 0;
-        },
-    },
-    /* ── Date column (row.date_created.date) ─────────────────── */
+
     {
         title: "Date",
         key: "date_created",
         render(row) {
-            const iso = row?.date_created?.date; // e.g. 2025-05-21 08:24:26.000000
-            if (!iso) return "—";
-
-            // strip micro-seconds and force UTC parse
-            const clean = iso.replace(/\.\d+$/, "") + "Z";
-            return new Date(clean).toLocaleString();
+            return formatOrderDate(row?.date_created?.date);
         },
     },
     {
@@ -215,8 +217,6 @@ function rowProps(row) {
 }
 
 function handleRowClick(row) {
-  console.log("Row clicked:", row);
-console.log("Row ID:", row.id);
     router.push(`/orders/${row.id}`);
 }
 
@@ -258,11 +258,20 @@ const addrStatusOptions = [
     { label: "Not Validated", value: "not-validated" },
 ];
 
-function handleStatusChange(value) {
-    selectedStatus.value = value;
-    page.value = 1;
-    fetchOrders(1);
-}
+const selectedDateLabel = computed(() => {
+    if (route.query.date_from && route.query.date_to) {
+        const from = new Date(route.query.date_from);
+        const to = new Date(route.query.date_to);
+        const opts = { month: "short", day: "numeric" };
+
+        const sameDay = route.query.date_from === route.query.date_to;
+        return sameDay ? from.toLocaleDateString(undefined, opts) : `${from.toLocaleDateString(undefined, opts)} - ${to.toLocaleDateString(undefined, opts)}`;
+    }
+
+    return "Select a date";
+});
+
+
 
 async function fetchOrders(currentPage = 1) {
     loading.value = true;
@@ -275,6 +284,8 @@ async function fetchOrders(currentPage = 1) {
     if (selectedWarehouse.value) params.append("warehouse", selectedWarehouse.value);
     if (selectedExportStatus.value) params.append("export_status", selectedExportStatus.value);
     if (selectedAddrStatus.value) params.append("addr_status", selectedAddrStatus.value);
+    if (route.query.date_from) params.append("date_from", route.query.date_from);
+    if (route.query.date_to) params.append("date_to", route.query.date_to);
 
     try {
         const res = await fetch(`${apiBaseCustom}/orders?${params}`, {
@@ -284,13 +295,114 @@ async function fetchOrders(currentPage = 1) {
 
         orders.value = await res.json();
         totalPages.value = parseInt(res.headers.get("X-WP-TotalPages") || 1);
-
-        console.log("Fetched orders:", orders.value);
     } catch (err) {
         console.error(err);
         message.error("Failed to load orders");
     } finally {
         loading.value = false;
     }
+}
+
+const showCustomRange = ref(false);
+const customRange = ref([new Date(), new Date()]);
+
+const dateRangeOptions = [
+    { label: "All Time", key: "all_time" },
+    { label: "Today", key: "today" },
+    { label: "Yesterday", key: "yesterday" },
+    { label: "Last 7 Days", key: "last_7" },
+    { label: "Last 30 Days", key: "last_30" },
+    { label: "This Month", key: "this_month" },
+    {
+        key: "custom",
+        type: "render",
+        render() {
+            return h("div", { style: "padding: 8px 12px; width: 300px;" }, [
+                h(Datepicker, {
+                    modelValue: customRange.value,
+                    "onUpdate:modelValue": applyCustomRange,
+                    range: true,
+                    format: "dd/MM/yy",
+                    previewFormat: "dd/MM/yy",
+                    enableTimePicker: false,
+                    autoApply: true,
+                    startDate: new Date(),
+                    showNowButton: false,
+                }),
+            ]);
+        },
+    },
+];
+
+function handleDateFilter(key) {
+    showCustomRange.value = false;
+
+    const now = new Date();
+    let from, to;
+
+    switch (key) {
+        case "today":
+            from = to = now;
+            break;
+        case "yesterday":
+            from = to = new Date(now.setDate(now.getDate() - 1));
+            break;
+        case "last_7":
+            from = new Date(now.setDate(now.getDate() - 6));
+            to = new Date();
+            break;
+        case "last_30":
+            from = new Date(now.setDate(now.getDate() - 29));
+            to = new Date();
+            break;
+        case "this_month":
+            from = new Date(now.getFullYear(), now.getMonth(), 1);
+            to = new Date();
+            break;
+        case "all_time":
+            customRange.value = [new Date(), new Date()];
+            page.value = 1;
+            router.replace({
+                path: "/orders",
+                query: {
+                    ...route.query,
+                    page: 1,
+                    date_from: undefined,
+                    date_to: undefined,
+                },
+            });
+            return;
+        case "custom":
+            return; // handled in render
+    }
+
+    customRange.value = [from, to];
+    applyDateFilter(from, to);
+}
+
+function applyCustomRange(value) {
+    if (!Array.isArray(value) || value.length !== 2) return;
+    customRange.value = value;
+    const [from, to] = value;
+    if (from && to) {
+        applyDateFilter(from, to);
+    }
+}
+
+function applyDateFilter(from, to) {
+    const format = (d) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+    };
+    router.replace({
+        path: "/orders",
+        query: {
+            ...route.query,
+            date_from: format(from),
+            date_to: format(to),
+        },
+    });
 }
 </script>
