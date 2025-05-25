@@ -6,7 +6,7 @@ $border-color: #ddd;
 $text-muted: #555;
 $shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 
-// 🧱 Global Typography
+// 🧱 Typography & Base
 .page-title {
     font-size: 2rem;
     font-weight: 600;
@@ -22,10 +22,10 @@ $shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 
 .order-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); // 🔼 changed from 300px
+    grid-template-columns: 1fr 1fr 1.4fr;
     gap: 1.5rem;
     margin-top: 2rem;
-  }
+}
 
 // 📦 Panel Layout
 .panel {
@@ -36,33 +36,41 @@ $shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
     box-shadow: $shadow;
 
     h3 {
-        background: linear-gradient(to right, #3b8d99, #6b6b83);
         color: white;
         padding: 0.5rem 1rem;
         margin: -1rem -1rem 1rem -1rem;
         border-radius: $panel-radius $panel-radius 0 0;
-    }
-    
-    &.products-panel h3 {
-        background: linear-gradient(to right, #1d976c, #93f9b9);
-    }
-
-    &.notes-panel h3 {
-        background: linear-gradient(to right, #cc2b5e, #753a88);
-    }
-
-    &.totals-panel h3 {
-        background: linear-gradient(to right, #283c86, #45a247);
+        background: linear-gradient(to right, #4b5563, #1f2937); // default: dark gray
     }
 
     &.order-info-panel h3 {
-        background: linear-gradient(to right, #6a11cb, #2575fc); // 🎨 example: purple-to-blue
+        background: linear-gradient(to right, #3b82f6, #1e40af); // Blue
+    }
+
+    &.info-panel h3 {
+        background: linear-gradient(to right, #10b981, #065f46); // Teal
+    }
+
+    &.products-panel h3 {
+        background: linear-gradient(to right, #6366f1, #4338ca); // Indigo
+    }
+
+    &.totals-panel h3 {
+        background: linear-gradient(to right, #f59e0b, #b45309); // Amber
+    }
+
+    &.notes-panel h3 {
+        background: linear-gradient(to right, #ef4444, #991b1b); // Red
+    }
+
+    &.warehouse-export-panel h3 {
+        background: linear-gradient(to right, #6b7280, #374151); // Slate gray
     }
 }
 
 // 📝 Notes Panel
 .notes-scroll {
-    max-height: 300px;
+    max-height: 450px;
     overflow-y: auto;
     padding-right: 0.5rem;
 }
@@ -110,6 +118,25 @@ $shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
     td {
         font-size: 0.95rem;
     }
+
+    .line-discount {
+        color: #d32f2f;
+        font-size: 0.8rem;
+        margin-top: 2px;
+    }
+
+    .refunded-amount,
+    .refunded-qty {
+        color: #b91c1c;
+        font-size: 0.8rem;
+        margin-top: 2px;
+
+        .dashicons {
+            font-size: 0.9rem;
+            margin-right: 4px;
+            vertical-align: middle;
+        }
+    }
 }
 
 .product-cell {
@@ -126,17 +153,61 @@ $shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 }
 
 // 💰 Order Totals
-.totals-list p {
-    margin: 0.4rem 0;
-    font-size: 0.95rem;
+.totals-list {
+    p {
+        margin: 0.4rem 0;
+        font-size: 0.95rem;
+    }
+
+    .totals-section {
+        margin-bottom: 1rem;
+    }
+
+    .final-totals p {
+        font-weight: 500;
+        font-size: 1rem;
+    }
+
+    .totals-divider {
+        border: none;
+        border-top: 1px solid #ccc;
+        margin: 1rem 0;
+    }
+    .refunded-row {
+        color: #b91c1c;
+    }
+    .coupon-list {
+        list-style: none;
+        padding-left: 0;
+
+        li {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .coupon-code {
+            display: inline-block;
+            background: #f3f4f6;
+            color: #111;
+            padding: 2px 6px;
+            font-size: 0.85rem;
+            border-radius: 4px;
+            font-weight: 500;
+            font-family: monospace;
+        }
+    }
 }
 
+// 📄 Orders List Styles
 .orders-list {
     padding: 2rem;
     font-family: system-ui, sans-serif;
+
     .filters {
         margin-bottom: 1rem;
     }
+
     .n-data-table {
         font-size: 0.95rem;
     }
@@ -153,31 +224,31 @@ $shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
         font-weight: 500;
         display: inline-block;
         text-transform: capitalize;
-    }
 
-    .order-status.processing {
-        background: #fef3c7;
-        color: #92400e;
-    }
+        &.processing {
+            background: #fef3c7;
+            color: #92400e;
+        }
 
-    .order-status.completed {
-        background: #d1fae5;
-        color: #065f46;
-    }
+        &.completed {
+            background: #d1fae5;
+            color: #065f46;
+        }
 
-    .order-status.pending {
-        background: #e0e7ff;
-        color: #3730a3;
-    }
+        &.pending {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
 
-    .order-status.failed {
-        background: #fee2e2;
-        color: #991b1b;
-    }
+        &.failed {
+            background: #fee2e2;
+            color: #991b1b;
+        }
 
-    .order-status.on-hold {
-        background: #ede9fe;
-        color: #6b21a8;
+        &.on-hold {
+            background: #ede9fe;
+            color: #6b21a8;
+        }
     }
 
     .breakdown-list {
@@ -188,7 +259,7 @@ $shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
     }
 }
 
-/* === Warehouse & Export tags (copied from WP-Admin) ============== */
+// 🚚 Warehouse & Export Tags
 .warehouse-export-tag,
 .warehouse-export-status-tag {
     display: inline-block;
@@ -199,7 +270,6 @@ $shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
     text-transform: capitalize;
 }
 
-/* Generic / default */
 .warehouse-export-pending {
     background: #9e9e9e;
 }
@@ -246,7 +316,8 @@ $shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 .warehouse-export-status-shipped {
     background: #2196f3;
 }
-/* Address-validation tags – same palette as the WP admin plugin */
+
+// 📬 Address Validation Tags
 .address-validation-tag {
     display: inline-block;
     padding: 2px 6px;
@@ -272,11 +343,13 @@ $shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
     background: #cccccc;
 } /* light gray */
 
+// 🔍 Filters
 .filter-field {
     display: flex;
     flex-direction: column;
     min-width: 180px;
-}
-.filter-field .n-select {
-    margin-top: 2px;
+
+    .n-select {
+        margin-top: 2px;
+    }
 }

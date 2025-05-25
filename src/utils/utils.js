@@ -1,10 +1,10 @@
+import { ref } from "vue";
+
 export function formatOrderDate(rawDate, showTime = false) {
     if (!rawDate) return "—";
 
     // Ensure it's treated as UTC if it lacks timezone info
-    const date = new Date(
-        rawDate.match(/Z|[+-]\d{2}:\d{2}$/) ? rawDate : rawDate + "Z"
-    );
+    const date = new Date(rawDate.match(/Z|[+-]\d{2}:\d{2}$/) ? rawDate : rawDate + "Z");
 
     const now = new Date();
     const diffMs = now - date;
@@ -33,4 +33,21 @@ export function formatOrderDate(rawDate, showTime = false) {
     }
 
     return date.toLocaleDateString(undefined, options);
+}
+
+const currentCurrency = ref("USD");
+
+export function setCurrency(currency) {
+    currentCurrency.value = currency || "USD";
+}
+
+
+export function formatCurrency(amount) {
+    if (isNaN(amount)) amount = 0;
+    return new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: currentCurrency.value,
+        currencyDisplay: "narrowSymbol", // <- this avoids "US$"
+        minimumFractionDigits: 2,
+    }).format(amount);
 }

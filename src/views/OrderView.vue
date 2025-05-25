@@ -7,12 +7,11 @@
             <!-- Order Info Panel -->
             <div class="panel order-info-panel">
                 <h3>Order Info</h3>
-                <n-skeleton v-if="loadingOrder" text :repeat="1" />
+                <n-skeleton v-if="loadingOrder" text :repeat="5" />
                 <div v-else>
-                    <p>
-                        <strong>Created At:</strong>
-                        {{ formattedCreatedDate }}
-                    </p>
+                    <p><strong>ID:</strong> {{ order.id }}</p>
+                    <p><strong>Status:</strong> {{ order.status }}</p>
+                    <p><strong>Date Created:</strong> {{ formattedCreatedDate }}</p>
                     <p><strong>New/Returning:</strong> {{ newOrReturning }}</p>
                 </div>
             </div>
@@ -36,7 +35,7 @@
             <!-- Order Products Panel -->
             <div class="panel products-panel">
                 <h3>Products</h3>
-                <n-skeleton v-if="loadingOrder" text :repeat="3" />
+                <n-skeleton v-if="loadingOrder" text :repeat="5" />
                 <table v-else class="product-table">
                     <thead>
                         <tr>
@@ -58,12 +57,93 @@
                                     </div>
                                 </div>
                             </td>
-                            <td>${{ (item.subtotal / item.quantity).toFixed(2) }}</td>
-                            <td>{{ item.quantity }}</td>
-                            <td>${{ Number(item.total).toFixed(2) }}</td>
+                            <td>{{ formatCurrency(item.subtotal / item.quantity) }}</td>
+                            <td>
+                                {{ item.quantity }}
+                                <div v-if="item.qty_refunded > 0" class="refunded-qty">
+                                    
+                                    ↩ -{{ item.qty_refunded }}
+                                </div>
+                            </td>
+                            <td>
+                                {{ formatCurrency(item.total) }}
+                                <div v-if="parseFloat(item.subtotal) > parseFloat(item.total)" class="line-discount">{{ formatCurrency(item.subtotal - item.total) }} discount</div>
+                                <div v-if="item.total_refunded > 0" class="refunded-amount">
+                                    ↩ -{{ formatCurrency(item.total_refunded) }}
+                                </div>
+                            </td>
                         </tr>
                     </tbody>
                 </table>
+            </div>
+
+            <!-- Warehouse Export Panel -->
+            <div class="panel warehouse-export-panel">
+                <h3>Warehouse Export</h3>
+                <n-skeleton v-if="loadingOrder" text :repeat="5" />
+                <div v-else>
+                    <p><strong>Warehouse:</strong> {{ getMeta("warehouse_to_export") || "—" }}</p>
+                    <p><strong>Export Status:</strong> {{ getMeta("warehouse_export_status") || "—" }}</p>
+                    <p><strong>Address Validated:</strong> {{ getMeta("validate_address_status") || "—" }}</p>
+                    <p v-if="trackingNumber"><strong>Tracking Number:</strong> {{ trackingNumber }}</p>
+                </div>
+            </div>
+
+            <!-- Order Totals Panel -->
+            <div class="panel totals-panel">
+                <h3>Order Totals</h3>
+                <n-skeleton v-if="loadingOrder" text :repeat="5" />
+                <div v-else class="totals-list">
+                    <!-- Subtotal -->
+                    <div class="totals-section">
+                        <p><strong>Items Subtotal:</strong> {{ formatCurrency(subtotal) }}</p>
+                    </div>
+
+                    <!-- Discounts -->
+                    <div v-if="order.coupon_lines?.length" class="totals-section">
+                        <p><strong>Discounts:</strong></p>
+                        <ul class="breakdown-list coupon-list">
+                            <li v-for="coupon in order.coupon_lines" :key="coupon.id">
+                                <span class="coupon-code">{{ coupon.code }}</span>
+                                — -{{ formatCurrency(coupon.discount) }}
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Fees -->
+                    <div v-if="order.fee_lines?.length" class="totals-section">
+                        <p><strong>Fees:</strong></p>
+                        <ul class="breakdown-list">
+                            <li v-for="fee in order.fee_lines" :key="fee.id">{{ fee.name }} — {{ formatCurrency(fee.total) }}</li>
+                        </ul>
+                    </div>
+
+                    <!-- Shipping -->
+                    <div class="totals-section">
+                        <p><strong>Shipping:</strong> {{ formatCurrency(order.shipping_total) }} ({{ shippingMethodTitle }})</p>
+                    </div>
+
+                    <!-- Taxes -->
+                    <div v-if="order.tax_lines?.length" class="totals-section">
+                        <p><strong>Taxes:</strong></p>
+                        <ul class="breakdown-list">
+                            <li v-for="tax in order.tax_lines" :key="tax.id">{{ tax.rate_code }} — {{ formatCurrency(tax.total) }}</li>
+                        </ul>
+                    </div>
+
+                    <!-- Total -->
+                    <hr class="totals-divider" />
+                    <div class="totals-section final-totals">
+                        <div v-if="totalRefunded > 0" class="totals-section refunded-row">
+                            <p><strong>Refunded:</strong> ↩ -{{ formatCurrency(totalRefunded) }}</p>
+                        </div>
+                        <p>
+                            <strong>Order Total:</strong> {{ formatCurrency(order.total) }}
+                        </p>
+                        <p><strong>Paid:</strong> {{ formatCurrency(order.total) }}</p>
+                        <p><strong>Payment Method:</strong> {{ order.payment_method_title }}</p>
+                    </div>
+                </div>
             </div>
 
             <!-- Order Notes Panel -->
@@ -82,42 +162,6 @@
                     </div>
                 </div>
             </div>
-
-            <!-- Order Totals Panel -->
-            <div class="panel totals-panel">
-                <h3>Order Totals</h3>
-                <n-skeleton v-if="loadingOrder" text :repeat="5" />
-                <div v-else class="totals-list">
-                    <!-- Subtotal -->
-                    <p><strong>Items Subtotal:</strong> ${{ subtotal }}</p>
-
-                    <!-- Fees -->
-                    <div v-if="order.fee_lines?.length">
-                        <p><strong>Fees:</strong></p>
-                        <ul class="breakdown-list">
-                            <li v-for="fee in order.fee_lines" :key="fee.id">{{ fee.name }} — ${{ fee.total }}</li>
-                        </ul>
-                    </div>
-
-                    <!-- Shipping -->
-                    <p><strong>Shipping:</strong> ${{ order.shipping_total || "0.00" }}</p>
-
-                    <!-- Taxes -->
-                    <div v-if="order.tax_lines?.length">
-                        <p><strong>Taxes:</strong></p>
-                        <ul class="breakdown-list">
-                            <li v-for="tax in order.tax_lines" :key="tax.id">{{ tax.rate_code }} — ${{ tax.total }}</li>
-                        </ul>
-                    </div>
-
-                    <!-- Totals -->
-                    <p>
-                        <strong><u>Order Total:</u></strong> ${{ order.total }}
-                    </p>
-                    <p><strong>Paid:</strong> ${{ order.total }}</p>
-                    <p><strong>Payment Method:</strong> {{ order.payment_method_title }}</p>
-                </div>
-            </div>
         </div>
     </div>
 </template>
@@ -125,8 +169,8 @@
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { apiBase,apiBaseCustom, authHeader } from "@/utils/api";
-import { formatOrderDate } from "@/utils/utils";
+import { apiBase, apiBaseCustom, authHeader } from "@/utils/api";
+import { formatOrderDate, formatCurrency, setCurrency } from "@/utils/utils";
 
 const route = useRoute();
 const router = useRouter();
@@ -151,17 +195,33 @@ const subtotal = computed(() => {
     return sum.toFixed(2);
 });
 
+// Helper to fetch meta
+function getMeta(key) {
+    const meta = order.value?.meta_data?.find((m) => m.key === key);
+    return meta?.value;
+}
+
+// Shipping method title
+const shippingMethodTitle = computed(() => {
+    const methods = order.value?.shipping_lines || [];
+    return methods.length ? methods[0].method_title : "—";
+});
+
+// Tracking number logic
+const trackingNumber = computed(() => {
+    const meta = getMeta("_wc_shipment_tracking_items");
+    return Array.isArray(meta) && meta.length ? meta[0].tracking_number : null;
+});
+
+const totalRefunded = computed(() => {
+    if (!order.value?.refunds?.length) return 0;
+    return order.value.refunds.reduce((sum, r) => sum + Math.abs(parseFloat(r.total || 0)), 0);
+});
+
 const formattedCreatedDate = computed(() => {
     const raw = order.value?.date_created.date || "";
     return formatOrderDate(raw, true);
 });
-
-
-
-
-
-
-
 
 const props = defineProps({
     id: String,
@@ -211,5 +271,12 @@ watch(
     () => {
         loadOrderData();
     }
+);
+watch(
+    () => order.value.currency,
+    (currency) => {
+        setCurrency(currency);
+    },
+    { immediate: true }
 );
 </script>

@@ -1,4 +1,3 @@
-@charset "UTF-8";
 .page-title {
   font-size: 2rem;
   font-weight: 600;
@@ -14,7 +13,7 @@
 
 .order-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-template-columns: 1fr 1fr 1.4fr;
   gap: 1.5rem;
   margin-top: 2rem;
 }
@@ -27,27 +26,33 @@
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 }
 .panel h3 {
-  background: linear-gradient(to right, #3b8d99, #6b6b83);
   color: white;
   padding: 0.5rem 1rem;
   margin: -1rem -1rem 1rem -1rem;
   border-radius: 6px 6px 0 0;
-}
-.panel.products-panel h3 {
-  background: linear-gradient(to right, #1d976c, #93f9b9);
-}
-.panel.notes-panel h3 {
-  background: linear-gradient(to right, #cc2b5e, #753a88);
-}
-.panel.totals-panel h3 {
-  background: linear-gradient(to right, #283c86, #45a247);
+  background: linear-gradient(to right, #4b5563, #1f2937);
 }
 .panel.order-info-panel h3 {
-  background: linear-gradient(to right, #6a11cb, #2575fc);
+  background: linear-gradient(to right, #3b82f6, #1e40af);
+}
+.panel.info-panel h3 {
+  background: linear-gradient(to right, #10b981, #065f46);
+}
+.panel.products-panel h3 {
+  background: linear-gradient(to right, #6366f1, #4338ca);
+}
+.panel.totals-panel h3 {
+  background: linear-gradient(to right, #f59e0b, #b45309);
+}
+.panel.notes-panel h3 {
+  background: linear-gradient(to right, #ef4444, #991b1b);
+}
+.panel.warehouse-export-panel h3 {
+  background: linear-gradient(to right, #6b7280, #374151);
 }
 
 .notes-scroll {
-  max-height: 300px;
+  max-height: 450px;
   overflow-y: auto;
   padding-right: 0.5rem;
 }
@@ -89,6 +94,23 @@
 .product-table td {
   font-size: 0.95rem;
 }
+.product-table .line-discount {
+  color: #d32f2f;
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
+.product-table .refunded-amount,
+.product-table .refunded-qty {
+  color: #b91c1c;
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
+.product-table .refunded-amount .dashicons,
+.product-table .refunded-qty .dashicons {
+  font-size: 0.9rem;
+  margin-right: 4px;
+  vertical-align: middle;
+}
 
 .product-cell {
   display: flex;
@@ -107,6 +129,40 @@
 .totals-list p {
   margin: 0.4rem 0;
   font-size: 0.95rem;
+}
+.totals-list .totals-section {
+  margin-bottom: 1rem;
+}
+.totals-list .final-totals p {
+  font-weight: 500;
+  font-size: 1rem;
+}
+.totals-list .totals-divider {
+  border: none;
+  border-top: 1px solid #ccc;
+  margin: 1rem 0;
+}
+.totals-list .refunded-row {
+  color: #b91c1c;
+}
+.totals-list .coupon-list {
+  list-style: none;
+  padding-left: 0;
+}
+.totals-list .coupon-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.totals-list .coupon-list .coupon-code {
+  display: inline-block;
+  background: #f3f4f6;
+  color: #111;
+  padding: 2px 6px;
+  font-size: 0.85rem;
+  border-radius: 4px;
+  font-weight: 500;
+  font-family: monospace;
 }
 
 .orders-list {
@@ -158,7 +214,6 @@
   font-size: 0.95rem;
 }
 
-/* === Warehouse & Export tags (copied from WP-Admin) ============== */
 .warehouse-export-tag,
 .warehouse-export-status-tag {
   display: inline-block;
@@ -169,7 +224,6 @@
   text-transform: capitalize;
 }
 
-/* Generic / default */
 .warehouse-export-pending {
   background: #9e9e9e;
 }
@@ -227,7 +281,6 @@
   background: #2196f3;
 }
 
-/* Address-validation tags – same palette as the WP admin plugin */
 .address-validation-tag {
   display: inline-block;
   padding: 2px 6px;
@@ -257,7 +310,6 @@
   flex-direction: column;
   min-width: 180px;
 }
-
 .filter-field .n-select {
   margin-top: 2px;
 }/*# sourceMappingURL=main.css.map */
