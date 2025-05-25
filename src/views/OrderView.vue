@@ -10,9 +10,37 @@
                 <n-skeleton v-if="loadingOrder" text :repeat="5" />
                 <div v-else>
                     <p><strong>ID:</strong> {{ order.id }}</p>
-                    <p><strong>Status:</strong> {{ order.status }}</p>
+
+                    <p>
+                        <strong>Status: </strong>
+                        <template v-if="editingOrderInfo">
+                            <n-select v-model:value="editableOrderInfo.status" :options="statusOptions" placeholder="Select status" style="width: 200px" />
+                        </template>
+                        <template v-else>
+                            {{ order.status }}
+                        </template>
+                    </p>
+
                     <p><strong>Date Created:</strong> {{ formattedCreatedDate }}</p>
-                    <p><strong>New/Returning:</strong> {{ newOrReturning }}</p>
+                    <p>
+                        <strong>New/Returning: </strong>
+                        <template v-if="editingOrderInfo">
+                            <n-select v-model:value="editableOrderInfo.newOrReturning" :options="newOrReturningOptions" placeholder="Select type" style="width: 200px" />
+                        </template>
+                        <template v-else>
+                            {{ newOrReturning }}
+                        </template>
+                    </p>
+
+                    <div style="margin-top: 1rem">
+                        <template v-if="editingOrderInfo">
+                            <n-button size="small" type="primary" :loading="savingOrderInfo" @click="saveOrderInfo"> Save </n-button>
+                            <n-button size="small" ghost style="margin-left: 0.5rem" @click="cancelEditOrderInfo" :disabled="savingOrderInfo"> Cancel </n-button>
+                        </template>
+                        <template v-else>
+                            <n-button size="small" @click="enterEditOrderInfo">Edit</n-button>
+                        </template>
+                    </div>
                 </div>
             </div>
             <!-- Customer Info Panel -->
@@ -20,15 +48,50 @@
                 <h3>Customer Info</h3>
                 <n-skeleton v-if="loadingOrder" text :repeat="5" />
                 <div v-else>
-                    <p><strong>Name:</strong> {{ order.billing?.first_name }} {{ order.billing?.last_name }}</p>
-                    <p><strong>Email:</strong> {{ order.billing?.email }}</p>
-                    <p><strong>Phone:</strong> {{ order.billing?.phone }}</p>
                     <p>
-                        <strong>Address:</strong><br />
+                        <strong>Name: </strong>
+                        <template v-if="editingCustomerInfo">
+                            <n-input v-model:value="editableOrderInfo.billing.first_name" placeholder="First name" style="width: 130px; margin-right: 8px" />
+                            <n-input v-model:value="editableOrderInfo.billing.last_name" placeholder="Last name" style="width: 130px" />
+                        </template>
+                        <template v-else> {{ order.billing?.first_name }} {{ order.billing?.last_name }} </template>
+                    </p>
+
+                    <p>
+                        <strong>Email: </strong>
+                        <template v-if="editingCustomerInfo">
+                            <n-input v-model:value="editableOrderInfo.billing.email" type="email" placeholder="Email" style="width: 270px" />
+                        </template>
+                        <template v-else>
+                            {{ order.billing?.email }}
+                        </template>
+                    </p>
+
+                    <p>
+                        <strong>Phone: </strong>
+                        <template v-if="editingCustomerInfo">
+                            <n-input v-model:value="editableOrderInfo.billing.phone" placeholder="Phone" style="width: 200px" />
+                        </template>
+                        <template v-else>
+                            {{ order.billing?.phone }}
+                        </template>
+                    </p>
+                    <p>
+                        <strong>Address: </strong><br />
                         {{ order.billing?.address_1 }}<br />
                         {{ order.billing?.city }}, {{ order.billing?.postcode }}<br />
                         {{ order.billing?.country }}
                     </p>
+
+                    <div style="margin-top: 1rem">
+                        <template v-if="editingCustomerInfo">
+                            <n-button size="small" type="primary" @click="saveCustomerInfo" :loading="savingCustomerInfo"> Save </n-button>
+                            <n-button size="small" ghost style="margin-left: 0.5rem" @click="cancelEditCustomerInfo" :disabled="savingCustomerInfo"> Cancel </n-button>
+                        </template>
+                        <template v-else>
+                            <n-button size="small" @click="enterEditCustomerInfo">Edit</n-button>
+                        </template>
+                    </div>
                 </div>
             </div>
 
@@ -60,17 +123,12 @@
                             <td>{{ formatCurrency(item.subtotal / item.quantity) }}</td>
                             <td>
                                 {{ item.quantity }}
-                                <div v-if="item.qty_refunded > 0" class="refunded-qty">
-                                    
-                                    ↩ -{{ item.qty_refunded }}
-                                </div>
+                                <div v-if="item.qty_refunded > 0" class="refunded-qty">↩ -{{ item.qty_refunded }}</div>
                             </td>
                             <td>
                                 {{ formatCurrency(item.total) }}
                                 <div v-if="parseFloat(item.subtotal) > parseFloat(item.total)" class="line-discount">{{ formatCurrency(item.subtotal - item.total) }} discount</div>
-                                <div v-if="item.total_refunded > 0" class="refunded-amount">
-                                    ↩ -{{ formatCurrency(item.total_refunded) }}
-                                </div>
+                                <div v-if="item.total_refunded > 0" class="refunded-amount">↩ -{{ formatCurrency(item.total_refunded) }}</div>
                             </td>
                         </tr>
                     </tbody>
@@ -137,9 +195,7 @@
                         <div v-if="totalRefunded > 0" class="totals-section refunded-row">
                             <p><strong>Refunded:</strong> ↩ -{{ formatCurrency(totalRefunded) }}</p>
                         </div>
-                        <p>
-                            <strong>Order Total:</strong> {{ formatCurrency(order.total) }}
-                        </p>
+                        <p><strong>Order Total:</strong> {{ formatCurrency(order.total) }}</p>
                         <p><strong>Paid:</strong> {{ formatCurrency(order.total) }}</p>
                         <p><strong>Payment Method:</strong> {{ order.payment_method_title }}</p>
                     </div>
@@ -171,7 +227,9 @@ import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiBase, apiBaseCustom, authHeader } from "@/utils/api";
 import { formatOrderDate, formatCurrency, setCurrency } from "@/utils/utils";
+import { useMessage } from "naive-ui";
 
+const message = useMessage();
 const route = useRoute();
 const router = useRouter();
 
@@ -180,6 +238,38 @@ const order = ref({});
 const orderNotes = ref([]);
 const loadingOrder = ref(true);
 const loadingNotes = ref(true);
+
+const editingOrderInfo = ref(false);
+const editableOrderInfo = ref({
+    status: "",
+    newOrReturning: "",
+    billing: {
+        first_name: "",
+        last_name: "",
+        email: "",
+        phone: "",
+    },
+});
+
+const savingOrderInfo = ref(false);
+
+const editingCustomerInfo = ref(false);
+const savingCustomerInfo = ref(false);
+
+const statusOptions = [
+    { label: "Pending", value: "pending" },
+    { label: "Processing", value: "processing" },
+    { label: "On Hold", value: "on-hold" },
+    { label: "Completed", value: "completed" },
+    { label: "Cancelled", value: "cancelled" },
+    { label: "Refunded", value: "refunded" },
+    { label: "Failed", value: "failed" },
+];
+
+const newOrReturningOptions = [
+    { label: "New", value: "new" },
+    { label: "Returning", value: "returning" },
+];
 
 const newOrReturning = computed(() => {
     const meta = order.value?.meta_data || [];
@@ -256,6 +346,86 @@ const fetchNotes = async () => {
     }
 };
 
+function enterEditOrderInfo() {
+    editableOrderInfo.value.status = order.value.status;
+    editingOrderInfo.value = true;
+}
+
+function cancelEditOrderInfo() {
+    editingOrderInfo.value = false;
+}
+
+async function saveOrderInfo() {
+    savingOrderInfo.value = true;
+
+    const payload = {
+        status: editableOrderInfo.value.status,
+        meta: {
+            new_or_returning: editableOrderInfo.value.newOrReturning,
+        },
+    };
+
+    try {
+        const res = await fetch(`${apiBaseCustom}/orders/${props.id}`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: authHeader,
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) throw new Error("Failed to update");
+
+        message.success("Order updated");
+        editingOrderInfo.value = false;
+        await loadOrderData(); // wait for fresh data
+    } catch (err) {
+        message.error("Update failed");
+        console.error(err);
+    } finally {
+        savingOrderInfo.value = false;
+    }
+}
+
+function enterEditCustomerInfo() {
+    editingCustomerInfo.value = true;
+}
+
+function cancelEditCustomerInfo() {
+    editingCustomerInfo.value = false;
+}
+
+async function saveCustomerInfo() {
+    savingCustomerInfo.value = true;
+
+    const payload = {
+        billing: editableOrderInfo.value.billing,
+    };
+
+    try {
+        const res = await fetch(`${apiBaseCustom}/orders/${props.id}`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: authHeader,
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) throw new Error("Failed to update");
+
+        message.success("Customer info updated");
+        editingCustomerInfo.value = false;
+        await loadOrderData();
+    } catch (err) {
+        message.error("Update failed");
+        console.error(err);
+    } finally {
+        savingCustomerInfo.value = false;
+    }
+}
+
 const loadOrderData = () => {
     fetchOrder();
     fetchNotes();
@@ -278,5 +448,18 @@ watch(
         setCurrency(currency);
     },
     { immediate: true }
+);
+
+watch(
+    () => order.value,
+    (val) => {
+        editableOrderInfo.value.status = val.status;
+        editableOrderInfo.value.newOrReturning = getMeta("new_or_returning") || "";
+
+        editableOrderInfo.value.billing.first_name = val.billing?.first_name || "";
+        editableOrderInfo.value.billing.last_name = val.billing?.last_name || "";
+        editableOrderInfo.value.billing.email = val.billing?.email || "";
+        editableOrderInfo.value.billing.phone = val.billing?.phone || "";
+    }
 );
 </script>
