@@ -8,6 +8,11 @@
             </div>
 
             <div class="filter-field">
+                <n-text depth="3">Tags</n-text>
+                <n-select v-model:value="selectedTag" :options="tagFilterOptions" placeholder="All" clearable />
+            </div>
+
+            <div class="filter-field">
                 <n-text depth="3">Warehouse</n-text>
                 <n-select v-model:value="selectedWarehouse" :options="warehouseOptions" placeholder="All" clearable />
             </div>
@@ -51,6 +56,7 @@ import Datepicker from "@vuepic/vue-datepicker";
 import "@vuepic/vue-datepicker/dist/main.css";
 import { computed } from "vue";
 import { formatOrderDate } from "@/utils/utils";
+import { getSpecialTags } from "@/utils/orderTags";
 
 const orders = ref([]);
 
@@ -72,6 +78,7 @@ const selectedStatus = ref(route.query.status ?? null);
 const selectedWarehouse = ref(route.query.warehouse ?? null);
 const selectedExportStatus = ref(route.query.export_status ?? null);
 const selectedAddrStatus = ref(route.query.addr_status ?? null);
+const selectedTag = ref(route.query.tag ?? null);
 
 watchEffect(() => {
     router.replace({
@@ -84,6 +91,7 @@ watchEffect(() => {
             addr_status: selectedAddrStatus.value || undefined,
             date_from: route.query.date_from || undefined,
             date_to: route.query.date_to || undefined,
+            tag: selectedTag.value || undefined,
         },
     });
 
@@ -105,11 +113,24 @@ const columns = [
             const last = row.billing?.last_name || "";
             const name = (first + " " + last).trim() || "Guest";
 
-            return h("div", { class: "order-id", style: { display: "flex", gap: "6px", alignItems: "center" } }, [
-                /* small ID tag */
-                h(NTag, { size: "small" }, { default: () => `#${row.id}` }),
-                h("span", null, name),
-            ]);
+            return h("div", { style: { display: "flex", gap: "6px", alignItems: "center" } }, [h(NTag, { size: "small" }, { default: () => `#${row.id}` }), h("span", null, name)]);
+        },
+    },
+    {
+        title: "Tags",
+        key: "special_tags",
+        render(row) {
+            return h(
+                "div",
+                {
+                    style: {
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "6px",
+                    },
+                },
+                getSpecialTags(row)
+            );
         },
     },
 
@@ -258,6 +279,17 @@ const addrStatusOptions = [
     { label: "Not Validated", value: "not-validated" },
 ];
 
+const tagFilterOptions = [
+    { label: "All", value: null },
+    { label: "PPU on-hold", value: "ppu-on-hold" },
+    { label: "PPU Added", value: "ppu-added" },
+    { label: "Facebook", value: "facebook" },
+    { label: "Walmart", value: "walmart" },
+    { label: "Subscription Renewal", value: "subscription-renewal" },
+    { label: "Subscription Parent", value: "subscription-parent" },
+    { label: "BAS Added", value: "bas-added" },
+];
+
 const selectedDateLabel = computed(() => {
     if (route.query.date_from && route.query.date_to) {
         const from = new Date(route.query.date_from);
@@ -270,8 +302,6 @@ const selectedDateLabel = computed(() => {
 
     return "Select a date";
 });
-
-
 
 async function fetchOrders(currentPage = 1) {
     loading.value = true;
@@ -286,6 +316,7 @@ async function fetchOrders(currentPage = 1) {
     if (selectedAddrStatus.value) params.append("addr_status", selectedAddrStatus.value);
     if (route.query.date_from) params.append("date_from", route.query.date_from);
     if (route.query.date_to) params.append("date_to", route.query.date_to);
+    if (selectedTag.value) params.append("tag", selectedTag.value);
 
     try {
         const res = await fetch(`${apiBaseCustom}/orders?${params}`, {
@@ -404,5 +435,10 @@ function applyDateFilter(from, to) {
             date_to: format(to),
         },
     });
+}
+
+function getMetaValue(row, key) {
+    const entry = (row.meta_data || []).find((m) => m.key === key);
+    return entry ? entry.value : null;
 }
 </script>

@@ -17,6 +17,9 @@
   gap: 1.5rem;
   margin-top: 2rem;
 }
+.order-grid .span-2-cols {
+  grid-column: span 2;
+}
 
 .panel {
   border: 1px solid #ddd;
@@ -51,7 +54,19 @@
   background: linear-gradient(to right, #6b7280, #374151);
 }
 
+.load-more-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
 .notes-scroll {
+  max-height: 450px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.past-orders-scroll {
   max-height: 450px;
   overflow-y: auto;
   padding-right: 0.5rem;
@@ -110,6 +125,23 @@
   font-size: 0.9rem;
   margin-right: 4px;
   vertical-align: middle;
+}
+
+.info-panel .address-columns {
+  display: flex;
+  gap: 24px;
+}
+.info-panel .address-columns .address-section {
+  flex: 1;
+}
+.info-panel .address-columns .address-section h4 {
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+.info-panel .address-columns .address-section .n-input {
+  margin-bottom: 8px;
+  width: 100%;
 }
 
 .product-cell {

@@ -43,50 +43,96 @@
                     </div>
                 </div>
             </div>
+
             <!-- Customer Info Panel -->
             <div class="panel info-panel">
                 <h3>Customer Info</h3>
                 <n-skeleton v-if="loadingOrder" text :repeat="5" />
                 <div v-else>
-                    <p>
-                        <strong>Name: </strong>
-                        <template v-if="editingCustomerInfo">
-                            <n-input v-model:value="editableOrderInfo.billing.first_name" placeholder="First name" style="width: 130px; margin-right: 8px" />
-                            <n-input v-model:value="editableOrderInfo.billing.last_name" placeholder="Last name" style="width: 130px" />
-                        </template>
-                        <template v-else> {{ order.billing?.first_name }} {{ order.billing?.last_name }} </template>
-                    </p>
+                    <div style="margin-bottom: 1rem">
+                        <p>
+                            <strong>Name: </strong>
+                            <template v-if="editingCustomerInfo">
+                                <n-input v-model:value="editableOrderInfo.billing.first_name" placeholder="First name" style="width: 130px; margin-right: 8px" />
+                                <n-input v-model:value="editableOrderInfo.billing.last_name" placeholder="Last name" style="width: 130px" />
+                            </template>
+                            <template v-else> {{ order.billing?.first_name }} {{ order.billing?.last_name }} </template>
+                        </p>
 
-                    <p>
-                        <strong>Email: </strong>
-                        <template v-if="editingCustomerInfo">
-                            <n-input v-model:value="editableOrderInfo.billing.email" type="email" placeholder="Email" style="width: 270px" />
-                        </template>
-                        <template v-else>
-                            {{ order.billing?.email }}
-                        </template>
-                    </p>
+                        <p>
+                            <strong>Email: </strong>
+                            <template v-if="editingCustomerInfo">
+                                <n-input v-model:value="editableOrderInfo.billing.email" type="email" placeholder="Email" style="width: 270px" />
+                            </template>
+                            <template v-else>
+                                {{ order.billing?.email }}
+                            </template>
+                        </p>
 
-                    <p>
-                        <strong>Phone: </strong>
-                        <template v-if="editingCustomerInfo">
-                            <n-input v-model:value="editableOrderInfo.billing.phone" placeholder="Phone" style="width: 200px" />
-                        </template>
-                        <template v-else>
-                            {{ order.billing?.phone }}
-                        </template>
-                    </p>
-                    <p>
-                        <strong>Address: </strong><br />
-                        {{ order.billing?.address_1 }}<br />
-                        {{ order.billing?.city }}, {{ order.billing?.postcode }}<br />
-                        {{ order.billing?.country }}
-                    </p>
+                        <p>
+                            <strong>Phone: </strong>
+                            <template v-if="editingCustomerInfo">
+                                <n-input v-model:value="editableOrderInfo.billing.phone" placeholder="Phone" style="width: 200px" />
+                            </template>
+                            <template v-else>
+                                {{ order.billing?.phone }}
+                            </template>
+                        </p>
+                    </div>
 
+                    <!-- Address Columns -->
+                    <div class="address-columns">
+                        <!-- Billing -->
+                        <div class="address-section">
+                            <h4>Billing Address</h4>
+                            <template v-if="editingCustomerInfo">
+                                <n-input v-model:value="editableOrderInfo.billing.address_1" placeholder="Address 1" />
+                                <n-input v-model:value="editableOrderInfo.billing.address_2" placeholder="Address 2" />
+                                <n-input v-model:value="editableOrderInfo.billing.city" placeholder="City" />
+                                <n-input v-model:value="editableOrderInfo.billing.state" placeholder="State" />
+                                <n-input v-model:value="editableOrderInfo.billing.postcode" placeholder="Postcode" />
+                                <n-input v-model:value="editableOrderInfo.billing.country" placeholder="Country" />
+                            </template>
+                            <template v-else>
+                                <p>
+                                    {{ order.billing?.address_1 }}<br />
+                                    {{ order.billing?.address_2 }}<br />
+                                    {{ order.billing?.city }}, {{ order.billing?.postcode }}<br />
+                                    {{ order.billing?.state }}, {{ order.billing?.country }}
+                                </p>
+                            </template>
+                        </div>
+
+                        <!-- Shipping -->
+                        <div class="address-section">
+                            <h4>Shipping Address</h4>
+                            <template v-if="editingCustomerInfo">
+                                <n-input v-model:value="editableOrderInfo.shipping.first_name" placeholder="First name" />
+                                <n-input v-model:value="editableOrderInfo.shipping.last_name" placeholder="Last name" />
+                                <n-input v-model:value="editableOrderInfo.shipping.address_1" placeholder="Address 1" />
+                                <n-input v-model:value="editableOrderInfo.shipping.address_2" placeholder="Address 2" />
+                                <n-input v-model:value="editableOrderInfo.shipping.city" placeholder="City" />
+                                <n-input v-model:value="editableOrderInfo.shipping.state" placeholder="State" />
+                                <n-input v-model:value="editableOrderInfo.shipping.postcode" placeholder="Postcode" />
+                                <n-input v-model:value="editableOrderInfo.shipping.country" placeholder="Country" />
+                            </template>
+                            <template v-else>
+                                <p>
+                                    {{ order.shipping?.first_name }} {{ order.shipping?.last_name }}<br />
+                                    {{ order.shipping?.address_1 }}<br />
+                                    {{ order.shipping?.address_2 }}<br />
+                                    {{ order.shipping?.city }}, {{ order.shipping?.postcode }}<br />
+                                    {{ order.shipping?.state }}, {{ order.shipping?.country }}
+                                </p>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Buttons -->
                     <div style="margin-top: 1rem">
                         <template v-if="editingCustomerInfo">
-                            <n-button size="small" type="primary" @click="saveCustomerInfo" :loading="savingCustomerInfo"> Save </n-button>
-                            <n-button size="small" ghost style="margin-left: 0.5rem" @click="cancelEditCustomerInfo" :disabled="savingCustomerInfo"> Cancel </n-button>
+                            <n-button size="small" type="primary" @click="saveCustomerInfo" :loading="savingCustomerInfo">Save</n-button>
+                            <n-button size="small" ghost style="margin-left: 0.5rem" @click="cancelEditCustomerInfo" :disabled="savingCustomerInfo">Cancel</n-button>
                         </template>
                         <template v-else>
                             <n-button size="small" @click="enterEditCustomerInfo">Edit</n-button>
@@ -106,6 +152,7 @@
                             <th>Cost</th>
                             <th>Qty</th>
                             <th>Total</th>
+                            <th>Tax</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -130,6 +177,7 @@
                                 <div v-if="parseFloat(item.subtotal) > parseFloat(item.total)" class="line-discount">{{ formatCurrency(item.subtotal - item.total) }} discount</div>
                                 <div v-if="item.total_refunded > 0" class="refunded-amount">↩ -{{ formatCurrency(item.total_refunded) }}</div>
                             </td>
+                            <td>{{ formatCurrency(+item.total_tax) }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -185,7 +233,7 @@
                     <div v-if="order.tax_lines?.length" class="totals-section">
                         <p><strong>Taxes:</strong></p>
                         <ul class="breakdown-list">
-                            <li v-for="tax in order.tax_lines" :key="tax.id">{{ tax.rate_code }} — {{ formatCurrency(tax.total) }}</li>
+                            <li v-for="tax in order.tax_lines" :key="tax.id">{{ tax.rate_code }} — {{ formatCurrency(+tax.tax_total) }}</li>
                         </ul>
                     </div>
 
@@ -218,12 +266,24 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Past Orders Panel -->
+            <div class="panel past-orders-panel span-2-cols">
+                <h3>Past Orders</h3>
+                <div class="past-orders-scroll">
+                    <n-data-table :columns="pastOrdersColumns" :data="pastOrders" :loading="pastOrdersLoading" size="small" striped />
+
+                    <div class="load-more-wrapper" v-if="pastOrdersHasMore">
+                        <n-button @click="loadMorePastOrders" :loading="pastOrdersLoading" size="small"> Load More </n-button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, watch, h } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiBase, apiBaseCustom, authHeader } from "@/utils/api";
 import { formatOrderDate, formatCurrency, setCurrency } from "@/utils/utils";
@@ -248,6 +308,22 @@ const editableOrderInfo = ref({
         last_name: "",
         email: "",
         phone: "",
+        address_1: "",
+        address_2: "",
+        city: "",
+        state: "",
+        postcode: "",
+        country: "",
+    },
+    shipping: {
+        first_name: "",
+        last_name: "",
+        address_1: "",
+        address_2: "",
+        city: "",
+        state: "",
+        postcode: "",
+        country: "",
     },
 });
 
@@ -401,6 +477,7 @@ async function saveCustomerInfo() {
 
     const payload = {
         billing: editableOrderInfo.value.billing,
+        shipping: editableOrderInfo.value.shipping,
     };
 
     try {
@@ -427,7 +504,7 @@ async function saveCustomerInfo() {
 }
 
 const loadOrderData = () => {
-    fetchOrder();
+    fetchOrder().then(fetchPastOrders);
     fetchNotes();
 };
 
@@ -450,16 +527,85 @@ watch(
     { immediate: true }
 );
 
+const billingKeys = ["first_name", "last_name", "email", "phone", "address_1", "address_2", "city", "state", "postcode", "country"];
+
+const shippingKeys = ["first_name", "last_name", "address_1", "address_2", "city", "state", "postcode", "country"];
+
+const pastOrdersColumns = [
+    {
+        title: "Order ID",
+        key: "id",
+        render(row) {
+            return h("a", { href: `#/orders/${row.id}` }, `#${row.id}`);
+        },
+    },
+    {
+        title: "Date",
+        key: "date_created",
+        render(row) {
+            return formatOrderDate(row.date_created);
+        },
+    },
+    {
+        title: "Status",
+        key: "status",
+        render(row) {
+            return row.status.charAt(0).toUpperCase() + row.status.slice(1);
+        },
+    },
+    {
+        title: "Total",
+        key: "total",
+        render(row) {
+            return formatCurrency(row.total);
+        },
+    },
+];
+
+const pastOrders = ref([]);
+const pastOrdersPage = ref(1);
+const pastOrdersHasMore = ref(true);
+const pastOrdersLoading = ref(false);
+
+const fetchPastOrders = async () => {
+    if (!order.value?.customer_id) return;
+
+    pastOrdersLoading.value = true;
+
+    try {
+        const res = await fetch(`${apiBaseCustom}/orders/by-user/${order.value.customer_id}?page=${pastOrdersPage.value}&per_page=10`, { headers: { Authorization: authHeader } });
+        const data = await res.json();
+
+        // Remove current order and append new ones
+        const filtered = data.filter((o) => o.id !== parseInt(props.id));
+        if (filtered.length < 10) pastOrdersHasMore.value = false;
+
+        pastOrders.value.push(...filtered);
+    } catch (err) {
+        console.error("Failed to load past orders:", err);
+    } finally {
+        pastOrdersLoading.value = false;
+    }
+};
+
+const loadMorePastOrders = () => {
+    pastOrdersPage.value += 1;
+    fetchPastOrders();
+};
+
 watch(
     () => order.value,
     (val) => {
         editableOrderInfo.value.status = val.status;
         editableOrderInfo.value.newOrReturning = getMeta("new_or_returning") || "";
 
-        editableOrderInfo.value.billing.first_name = val.billing?.first_name || "";
-        editableOrderInfo.value.billing.last_name = val.billing?.last_name || "";
-        editableOrderInfo.value.billing.email = val.billing?.email || "";
-        editableOrderInfo.value.billing.phone = val.billing?.phone || "";
+        billingKeys.forEach((key) => {
+            editableOrderInfo.value.billing[key] = val.billing?.[key] || "";
+        });
+
+        shippingKeys.forEach((key) => {
+            editableOrderInfo.value.shipping[key] = val.shipping?.[key] || "";
+        });
     }
 );
 </script>

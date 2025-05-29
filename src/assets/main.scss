@@ -25,6 +25,10 @@ $shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
     grid-template-columns: 1fr 1fr 1.4fr;
     gap: 1.5rem;
     margin-top: 2rem;
+
+    .span-2-cols {
+        grid-column: span 2;
+    }
 }
 
 // 📦 Panel Layout
@@ -68,8 +72,20 @@ $shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
     }
 }
 
+.load-more-wrapper {
+    display: flex;
+    justify-content: center;
+    margin-top: 1rem;
+}
+
 // 📝 Notes Panel
 .notes-scroll {
+    max-height: 450px;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+}
+
+.past-orders-scroll {
     max-height: 450px;
     overflow-y: auto;
     padding-right: 0.5rem;
@@ -135,6 +151,26 @@ $shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
             font-size: 0.9rem;
             margin-right: 4px;
             vertical-align: middle;
+        }
+    }
+}
+
+.info-panel {
+    .address-columns {
+        display: flex;
+        gap: 24px;
+        .address-section {
+            flex: 1;
+            h4 {
+                font-size: 14px;
+                font-weight: bold;
+                margin-bottom: 8px;
+            }
+
+            .n-input {
+                margin-bottom: 8px;
+                width: 100%;
+            }
         }
     }
 }

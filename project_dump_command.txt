@@ -13,7 +13,7 @@ function Write-Tree {
 
     $entries = Get-ChildItem $path | Where-Object {
         $_.Name -notin @("node_modules", ".git", "package-lock.json", ".gitignore") -and
-        $_.Extension -notin @(".txt", ".map")
+        $_.Extension -notin @(".txt", ".map", ".svg", ".png", ".jpg", ".woff2", ".ttf")
     }
 
     for ($i = 0; $i -lt $entries.Count; $i++) {
@@ -32,27 +32,29 @@ Write-Tree -path $rootPath.FullName
 
 Add-Content -Path $logPath -Value "`n------------------------------" -Encoding UTF8
 
-function Should-PrintContent {
+function Should-IncludeFile {
     param ([string]$filePath)
 
-    if ($filePath -like "*node_modules*") { return $false }
-    if ($filePath -like "*.css" -or $filePath -like "*.scss") { return $false }
-    if ($filePath -like "*.txt") { return $false }
-    if ($filePath -like "*.map") { return $false }
-    if ($filePath -like "*\.git*") { return $false }
-    if ($filePath -like "*my_log.txt") { return $false }
-    if ($filePath -like "*package-lock.json") { return $false }
-    if ($filePath -like "*.gitignore") { return $false }
-
-    return $true
+    return -not (
+        $filePath -like "*node_modules*" -or
+        $filePath -like "*\.git*" -or
+        $filePath -like "*dist*" -or
+        $filePath -like "*\.vscode*" -or
+        $filePath -like "*fonts*" -or
+        $filePath -like "*.css" -or
+        $filePath -like "*.scss" -or
+        $filePath -like "*.txt" -or
+        $filePath -like "*.png" -or
+        $filePath -like "*.jpg" -or
+        $filePath -like "*.svg" -or
+        $filePath -like "*.map" -or
+        $filePath -like "*package-lock.json" -or
+        $filePath -like "*.gitignore"
+    )
 }
 
 Get-ChildItem -Recurse -File | Where-Object {
-    $_.FullName -notlike "*node_modules*" -and
-    $_.FullName -notlike "*\.git*" -and
-    $_.Name -notmatch "\.(txt|map)$" -and
-    $_.Name -ne "package-lock.json" -and
-    $_.Name -ne ".gitignore"
+    Should-IncludeFile $_.FullName
 } | ForEach-Object {
     $filePath = $_.FullName
     $relativePath = $filePath.Replace($rootPath.Path, "").TrimStart("\", "/")
@@ -61,11 +63,11 @@ Get-ChildItem -Recurse -File | Where-Object {
     Add-Content -Path $logPath -Value "$($rootPath.Name)\$relativePath" -Encoding UTF8
     Add-Content -Path $logPath -Value "------------------------------" -Encoding UTF8
 
-    if (Should-PrintContent -filePath $filePath) {
+    try {
         $content = Get-Content $filePath -Encoding UTF8
         Add-Content -Path $logPath -Value $content -Encoding UTF8
-    } else {
-        Add-Content -Path $logPath -Value "[Content skipped]" -Encoding UTF8
+    } catch {
+        Add-Content -Path $logPath -Value "[Failed to read content]" -Encoding UTF8
     }
 
     Add-Content -Path $logPath -Value "`n" -Encoding UTF8
