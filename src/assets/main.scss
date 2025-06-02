@@ -39,25 +39,32 @@ $shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
     background: $panel-bg;
     box-shadow: $shadow;
 
+    h4 {
+        margin: 0;
+        margin-bottom: 0.5rem;
+        font-size: 1.1rem;
+        color: #334155;
+    }
+    hr {
+        margin: 2rem 0;
+        border: none;
+        border-top: 1px solid #e2e8f0;
+    }
+
     h3 {
         color: white;
         padding: 0.5rem 1rem;
+        font-size: 1.2rem;
         margin: -1rem -1rem 1rem -1rem;
         border-radius: $panel-radius $panel-radius 0 0;
         background: linear-gradient(to right, #4b5563, #1f2937); // default: dark gray
     }
 
-    &.order-info-panel h3 {
+    &.general-info-panel h3 {
         background: linear-gradient(to right, #3b82f6, #1e40af); // Blue
     }
 
-    &.info-panel h3 {
-        background: linear-gradient(to right, #10b981, #065f46); // Teal
-    }
 
-    &.products-panel h3 {
-        background: linear-gradient(to right, #6366f1, #4338ca); // Indigo
-    }
 
     &.totals-panel h3 {
         background: linear-gradient(to right, #f59e0b, #b45309); // Amber
@@ -80,7 +87,7 @@ $shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 
 // 📝 Notes Panel
 .notes-scroll {
-    max-height: 450px;
+    max-height: 750px;
     overflow-y: auto;
     padding-right: 0.5rem;
 }
@@ -155,7 +162,8 @@ $shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
     }
 }
 
-.info-panel {
+.general-info-panel {
+    
     .address-columns {
         display: flex;
         gap: 24px;
@@ -262,16 +270,16 @@ $shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
         text-transform: capitalize;
 
         &.processing {
-            background: #fef3c7;
-            color: #92400e;
-        }
-
-        &.completed {
             background: #d1fae5;
             color: #065f46;
         }
 
         &.pending {
+            background: #9e9e9e;
+            color: #fff;
+        }
+
+        &.completed {
             background: #e0e7ff;
             color: #3730a3;
         }
@@ -282,8 +290,8 @@ $shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
         }
 
         &.on-hold {
-            background: #ede9fe;
-            color: #6b21a8;
+            background: #fef3c7;
+            color: #92400e;
         }
     }
 

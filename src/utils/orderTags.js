@@ -41,8 +41,8 @@ export function getSpecialTags(row) {
     if (ppuProductsCount > 0) tags.push(makeTag("PPU Added", "#FF8C00"));
     if (fbOrderId) tags.push(makeTag("Facebook", "#1877F2"));
     if (walmartOrderId) tags.push(makeTag("Walmart", "#ffc220"));
-    if (hasRenewal) tags.push(makeTag("Subscription Renewal", "#a259ff"));
-    if (hasParent) tags.push(makeTag("Subscription Parent", "#7e22ce"));
+    if (hasRenewal) tags.push(makeTag("Sub Renewal", "#a259ff"));
+    if (hasParent) tags.push(makeTag("Sub Parent", "#7e22ce"));
     if (upsellAmount > 0) tags.push(makeTag("BAS Added", "#00b894"));
 
     return tags;

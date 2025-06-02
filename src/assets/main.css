@@ -28,21 +28,27 @@
   background: #fff;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 }
+.panel h4 {
+  margin: 0;
+  margin-bottom: 0.5rem;
+  font-size: 1.1rem;
+  color: #334155;
+}
+.panel hr {
+  margin: 2rem 0;
+  border: none;
+  border-top: 1px solid #e2e8f0;
+}
 .panel h3 {
   color: white;
   padding: 0.5rem 1rem;
+  font-size: 1.2rem;
   margin: -1rem -1rem 1rem -1rem;
   border-radius: 6px 6px 0 0;
   background: linear-gradient(to right, #4b5563, #1f2937);
 }
-.panel.order-info-panel h3 {
+.panel.general-info-panel h3 {
   background: linear-gradient(to right, #3b82f6, #1e40af);
-}
-.panel.info-panel h3 {
-  background: linear-gradient(to right, #10b981, #065f46);
-}
-.panel.products-panel h3 {
-  background: linear-gradient(to right, #6366f1, #4338ca);
 }
 .panel.totals-panel h3 {
   background: linear-gradient(to right, #f59e0b, #b45309);
@@ -61,7 +67,7 @@
 }
 
 .notes-scroll {
-  max-height: 450px;
+  max-height: 750px;
   overflow-y: auto;
   padding-right: 0.5rem;
 }
@@ -127,19 +133,19 @@
   vertical-align: middle;
 }
 
-.info-panel .address-columns {
+.general-info-panel .address-columns {
   display: flex;
   gap: 24px;
 }
-.info-panel .address-columns .address-section {
+.general-info-panel .address-columns .address-section {
   flex: 1;
 }
-.info-panel .address-columns .address-section h4 {
+.general-info-panel .address-columns .address-section h4 {
   font-size: 14px;
   font-weight: bold;
   margin-bottom: 8px;
 }
-.info-panel .address-columns .address-section .n-input {
+.general-info-panel .address-columns .address-section .n-input {
   margin-bottom: 8px;
   width: 100%;
 }
@@ -220,14 +226,14 @@
   text-transform: capitalize;
 }
 .orders-list .order-status.processing {
-  background: #fef3c7;
-  color: #92400e;
-}
-.orders-list .order-status.completed {
   background: #d1fae5;
   color: #065f46;
 }
 .orders-list .order-status.pending {
+  background: #9e9e9e;
+  color: #fff;
+}
+.orders-list .order-status.completed {
   background: #e0e7ff;
   color: #3730a3;
 }
@@ -236,8 +242,8 @@
   color: #991b1b;
 }
 .orders-list .order-status.on-hold {
-  background: #ede9fe;
-  color: #6b21a8;
+  background: #fef3c7;
+  color: #92400e;
 }
 .orders-list .breakdown-list {
   padding-left: 1.2rem;
