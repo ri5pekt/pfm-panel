@@ -343,6 +343,26 @@
 .address-validation-status-not-validated {
   background: #cccccc;
 } /* light gray */
+.address-status-pill,
+.warehouse-export-panel .warehouse-export-tag,
+.warehouse-export-panel .warehouse-export-status-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  color: #fff;
+  margin-left: 6px;
+  font-size: 0.85rem;
+  text-transform: capitalize;
+}
+
+.address-actions {
+  margin-top: 20px;
+}
+
+.warehouse-actions {
+  margin-top: 20px;
+}
+
 .filter-field {
   display: flex;
   flex-direction: column;

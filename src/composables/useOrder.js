@@ -1,15 +1,15 @@
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, computed, watch } from "vue";
 import { apiBaseCustom, authHeader } from "@/utils/api";
 import { formatOrderDate, setCurrency } from "@/utils/utils";
-import { useRoute } from "vue-router";
 
-export function useOrder(orderId) {
+export function useOrder(orderIdRef) {
     const order = ref(null);
     const loadingOrder = ref(true);
-    const route = useRoute();
 
- 
     const fetchOrder = async () => {
+        const orderId = orderIdRef.value;
+        if (!orderId) return;
+
         loadingOrder.value = true;
         try {
             const res = await fetch(`${apiBaseCustom}/orders/${orderId}`, {
@@ -19,12 +19,27 @@ export function useOrder(orderId) {
             order.value = json;
             console.log("✅ Order loaded:", json);
         } catch (err) {
-            console.error("Failed to fetch order", err);
+            console.error("❌ Failed to fetch order", err);
         } finally {
             loadingOrder.value = false;
         }
     };
 
+    // 🧠 Reactively re-fetch when order ID changes
+    watch(orderIdRef, () => {
+        fetchOrder();
+    }, { immediate: true });
+
+    // 🎯 Automatically update currency when order changes
+    watch(
+        () => order.value?.currency,
+        (currency) => {
+            if (currency) setCurrency(currency);
+        },
+        { immediate: true }
+    );
+
+    // 🎁 Extras
     const formattedCreatedDate = computed(() => {
         const raw = order.value?.date_created?.date || "";
         return formatOrderDate(raw, true);
@@ -40,19 +55,6 @@ export function useOrder(orderId) {
         return Array.isArray(trackingMeta) && trackingMeta.length ? trackingMeta[0].tracking_number : null;
     });
 
-    // update currency when order changes
-    watch(
-        () => order.value?.currency,
-        (currency) => {
-            if (currency) setCurrency(currency);
-        },
-        { immediate: true }
-    );
-
-    // auto-fetch when mounted
-    onMounted(fetchOrder);
-
-    // expose everything
     return {
         order,
         loadingOrder,

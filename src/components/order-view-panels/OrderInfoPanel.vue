@@ -6,7 +6,7 @@
             <div class="order-info">
                 <h4>Order info</h4>
                 <p><strong>ID:</strong> {{ order.id }}</p>
- 
+
                 <p>
                     <strong>Status:</strong>
                     <template v-if="editingOrderInfo">
@@ -17,9 +17,7 @@
                             style="width: 200px"
                         />
                     </template>
-                    <template v-else>
-                        &nbsp;{{ order.status }}
-                    </template>
+                    <template v-else> &nbsp;{{ order.status }} </template>
                 </p>
 
                 <p><strong>Date Created:</strong> {{ formattedCreatedDate }}</p>
@@ -34,9 +32,7 @@
                             style="width: 200px"
                         />
                     </template>
-                    <template v-else>
-                        &nbsp;{{ newOrReturning }}
-                    </template>
+                    <template v-else> &nbsp;{{ newOrReturning }} </template>
                 </p>
 
                 <p><strong>Payment Method:</strong> {{ order.payment_method_title }}</p>
@@ -156,17 +152,29 @@
 
                 <div style="margin-top: 1rem">
                     <template v-if="editingCustomerInfo">
-                        <n-button size="small" type="primary" @click="saveCustomerInfo" :loading="savingCustomerInfo"
-                            >Save</n-button
-                        >
-                        <n-button
-                            size="small"
-                            ghost
-                            style="margin-left: 0.5rem"
-                            @click="cancelEditCustomerInfo"
-                            :disabled="savingCustomerInfo"
-                            >Cancel</n-button
-                        >
+                        <n-space vertical size="small">
+                            <n-checkbox v-model:checked="updateCustomerProfile">Update customer profile</n-checkbox>
+
+                            <n-space>
+                                <n-button
+                                    size="small"
+                                    type="primary"
+                                    @click="saveCustomerInfo"
+                                    :loading="savingCustomerInfo"
+                                >
+                                    Save
+                                </n-button>
+                                <n-button
+                                    size="small"
+                                    ghost
+                                    style="margin-left: 0.5rem"
+                                    @click="cancelEditCustomerInfo"
+                                    :disabled="savingCustomerInfo"
+                                >
+                                    Cancel
+                                </n-button>
+                            </n-space>
+                        </n-space>
                     </template>
                     <template v-else>
                         <n-button size="small" @click="enterEditCustomerInfo">Edit</n-button>
@@ -198,6 +206,8 @@ const editingOrderInfo = ref(false);
 
 const savingOrderInfo = ref(false);
 const savingCustomerInfo = ref(false);
+
+const updateCustomerProfile = ref(false);
 
 const editableOrderInfo = ref({
     status: "",
@@ -339,6 +349,7 @@ async function saveCustomerInfo() {
     const payload = {
         billing: editableOrderInfo.value.billing,
         shipping: editableOrderInfo.value.shipping,
+        update_customer_profile: updateCustomerProfile.value,
     };
 
     try {

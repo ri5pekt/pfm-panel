@@ -17,32 +17,39 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, watch } from "vue";
 import { apiBase, authHeader } from "@/utils/api";
 
-const { orderId } = defineProps({
-    orderId: {
-        type: String,
-        required: true,
-    },
+// ✅ Props
+const props = defineProps({
+    orderId: String,
+    refreshKey: [String, Number],
 });
 
+// ✅ State
 const orderNotes = ref([]);
 const loadingNotes = ref(true);
 
+// ✅ Fetch function
 async function fetchNotes() {
+    console.log("Fetching order notes for ID:", props.orderId);
+    if (!props.orderId) return;
     loadingNotes.value = true;
+
     try {
-        const res = await fetch(`${apiBase}/orders/${orderId}/notes`, {
+        const res = await fetch(`${apiBase}/orders/${props.orderId}/notes`, {
             headers: { Authorization: authHeader },
         });
         orderNotes.value = await res.json();
     } catch (err) {
-        console.error("Failed to load order notes:", err);
+        console.error("❌ Failed to load order notes:", err);
     } finally {
         loadingNotes.value = false;
     }
 }
 
-onMounted(fetchNotes);
+// ✅ Watch orderId for changes and fetch on load
+watch([() => props.orderId, () => props.refreshKey], fetchNotes, {
+    immediate: true,
+});
 </script>
