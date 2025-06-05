@@ -18,7 +18,7 @@
 
 <script setup>
 import { ref, watch } from "vue";
-import { apiBase, authHeader } from "@/utils/api";
+import { request } from "@/utils/api";
 
 // ✅ Props
 const props = defineProps({
@@ -37,10 +37,10 @@ async function fetchNotes() {
     loadingNotes.value = true;
 
     try {
-        const res = await fetch(`${apiBase}/orders/${props.orderId}/notes`, {
-            headers: { Authorization: authHeader },
+        orderNotes.value = await request({
+            url: `/orders/${props.orderId}/notes`,
+            useCustomApi: false, // 👈 because this one uses apiBase (wc/v3), not custom
         });
-        orderNotes.value = await res.json();
     } catch (err) {
         console.error("❌ Failed to load order notes:", err);
     } finally {

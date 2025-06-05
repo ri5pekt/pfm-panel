@@ -43,10 +43,8 @@
 
 <script setup>
 import { useOrder } from "@/composables/useOrder";
-import { ref, computed, onMounted, watch, h } from "vue";
+import { ref, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { apiBase, apiBaseCustom, authHeader } from "@/utils/api";
-import { formatOrderDate, formatCurrency, setCurrency } from "@/utils/utils";
 import { useMessage } from "naive-ui";
 
 // Panles

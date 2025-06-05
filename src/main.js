@@ -20,6 +20,13 @@ const router = createRouter({
     routes,
 });
 
+if (typeof window.PFMPanelData === 'undefined') {
+    window.PFMPanelData = {
+        restUrl: 'https://particlestage.wpengine.com/wp-json/pfm-panel/v1/orders',
+        nonce: '3597e27540'
+    };
+}
+
 createApp({
     render: () =>
         h(NConfigProvider, null, {

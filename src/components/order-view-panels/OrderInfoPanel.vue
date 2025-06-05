@@ -188,7 +188,7 @@
 <script setup>
 import { ref, computed, watch } from "vue";
 import { useMessage } from "naive-ui";
-import { apiBaseCustom, authHeader } from "@/utils/api";
+import { request } from "@/utils/api";
 import { formatOrderDate } from "@/utils/utils";
 
 const props = defineProps({
@@ -313,16 +313,11 @@ async function saveOrderInfo() {
     };
 
     try {
-        const res = await fetch(`${apiBaseCustom}/orders/${props.order.id}`, {
+        await request({
+            url: `/orders/${props.order.id}`,
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: authHeader,
-            },
-            body: JSON.stringify(payload),
+            body: payload,
         });
-
-        if (!res.ok) throw new Error("Failed to update");
 
         message.success("Order updated");
         editingOrderInfo.value = false;
@@ -353,16 +348,11 @@ async function saveCustomerInfo() {
     };
 
     try {
-        const res = await fetch(`${apiBaseCustom}/orders/${props.order.id}`, {
+        await request({
+            url: `/orders/${props.order.id}`,
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: authHeader,
-            },
-            body: JSON.stringify(payload),
+            body: payload,
         });
-
-        if (!res.ok) throw new Error("Failed to update");
 
         message.success("Customer info updated");
         editingCustomerInfo.value = false;

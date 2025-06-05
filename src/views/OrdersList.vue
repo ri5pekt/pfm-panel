@@ -19,7 +19,12 @@
 
             <div class="filter-field">
                 <n-text depth="3">Export Status</n-text>
-                <n-select v-model:value="selectedExportStatus" :options="exportStatusOptions" placeholder="All" clearable />
+                <n-select
+                    v-model:value="selectedExportStatus"
+                    :options="exportStatusOptions"
+                    placeholder="All"
+                    clearable
+                />
             </div>
 
             <div class="filter-field">
@@ -28,18 +33,24 @@
             </div>
 
             <div class="filter-field">
-                <n-text depth="3">Date</n-text>
-                <n-dropdown trigger="click" :options="dateRangeOptions" @select="handleDateFilter">
-                    <n-button style="justify-content: flex-start; width: 150px">
-                        {{ selectedDateLabel }}
-                    </n-button>
-                </n-dropdown>
+                <DateRangeFilter
+                    :initial-from="route.query.date_from"
+                    :initial-to="route.query.date_to"
+                    @update:dateRange="handleDateRange"
+                />
             </div>
         </n-space>
 
         <n-space vertical size="large">
             <n-spin :show="loading">
-                <n-data-table :row-props="rowProps" :columns="columns" :data="orders" :pagination="false" :bordered="true" @row-click="handleRowClick" />
+                <n-data-table
+                    :row-props="rowProps"
+                    :columns="columns"
+                    :data="orders"
+                    :pagination="false"
+                    :bordered="true"
+                    @row-click="handleRowClick"
+                />
             </n-spin>
 
             <n-pagination v-model:page="page" :page-count="totalPages" :page-size="perPage" style="margin-top: 1rem" />
@@ -49,14 +60,15 @@
 
 <script setup>
 import { ref, watchEffect, h } from "vue";
-import { NButton, NTag, useMessage } from "naive-ui";
+import { NTag, useMessage } from "naive-ui";
 import { useRouter, useRoute } from "vue-router";
-import { apiBaseCustom, authHeader } from "@/utils/api";
-import Datepicker from "@vuepic/vue-datepicker";
+import { request } from "@/utils/api";
+
 import "@vuepic/vue-datepicker/dist/main.css";
-import { computed } from "vue";
+
 import { formatOrderDate } from "@/utils/utils";
 import { getSpecialTags } from "@/utils/orderTags";
+import DateRangeFilter from "@/components/ui-elements/DateRangeFilter.vue";
 
 const orders = ref([]);
 
@@ -98,6 +110,19 @@ watchEffect(() => {
     fetchOrders(page.value);
 });
 
+function handleDateRange(range) {
+    page.value = 1;
+    router.replace({
+        path: "/orders",
+        query: {
+            ...route.query,
+            page: 1,
+            date_from: range ? range.from : undefined,
+            date_to: range ? range.to : undefined,
+        },
+    });
+}
+
 function getMeta(row, key) {
     const entry = (row.meta_data || []).find((m) => m.key === key);
     return entry ? entry.value : null;
@@ -113,7 +138,10 @@ const columns = [
             const last = row.billing?.last_name || "";
             const name = (first + " " + last).trim() || "Guest";
 
-            return h("div", { style: { display: "flex", gap: "6px", alignItems: "center" } }, [h(NTag, { size: "small" }, { default: () => `#${row.id}` }), h("span", null, name)]);
+            return h("div", { style: { display: "flex", gap: "6px", alignItems: "center" } }, [
+                h(NTag, { size: "small" }, { default: () => `#${row.id}` }),
+                h("span", null, name),
+            ]);
         },
     },
     {
@@ -167,12 +195,24 @@ const columns = [
 
             // ShipStation branch
             if (!warehouse || warehouse === "") {
-                const classes = ["warehouse-export-tag", "warehouse-export-shipstation", shipstation === "yes" ? "warehouse-export-exported" : "warehouse-export-pending"];
+                const classes = [
+                    "warehouse-export-tag",
+                    "warehouse-export-shipstation",
+                    shipstation === "yes" ? "warehouse-export-exported" : "warehouse-export-pending",
+                ];
                 return h("span", { class: classes.join(" ") }, "Shipstation");
             }
 
             // Internal warehouses
-            const classes = ["warehouse-export-tag", `warehouse-${warehouse.toLowerCase()}`, status === "exported" || status === "shipped" ? "warehouse-export-exported" : status === "failed" ? "warehouse-export-failed" : "warehouse-export-pending"];
+            const classes = [
+                "warehouse-export-tag",
+                `warehouse-${warehouse.toLowerCase()}`,
+                status === "exported" || status === "shipped"
+                    ? "warehouse-export-exported"
+                    : status === "failed"
+                    ? "warehouse-export-failed"
+                    : "warehouse-export-pending",
+            ];
             return h("span", { class: classes.join(" ") }, warehouse);
         },
     },
@@ -188,8 +228,13 @@ const columns = [
 
             // ShipStation orders
             if (!warehouse || warehouse === "") {
-                const tagClass = shipstation === "yes" ? "warehouse-export-status-exported" : "warehouse-export-status-pending";
-                return h("span", { class: ["warehouse-export-status-tag", tagClass].join(" ") }, shipstation === "yes" ? "Exported" : "Pending");
+                const tagClass =
+                    shipstation === "yes" ? "warehouse-export-status-exported" : "warehouse-export-status-pending";
+                return h(
+                    "span",
+                    { class: ["warehouse-export-status-tag", tagClass].join(" ") },
+                    shipstation === "yes" ? "Exported" : "Pending"
+                );
             }
 
             // Internal system
@@ -290,19 +335,6 @@ const tagFilterOptions = [
     { label: "BAS Added", value: "bas-added" },
 ];
 
-const selectedDateLabel = computed(() => {
-    if (route.query.date_from && route.query.date_to) {
-        const from = new Date(route.query.date_from);
-        const to = new Date(route.query.date_to);
-        const opts = { month: "short", day: "numeric" };
-
-        const sameDay = route.query.date_from === route.query.date_to;
-        return sameDay ? from.toLocaleDateString(undefined, opts) : `${from.toLocaleDateString(undefined, opts)} - ${to.toLocaleDateString(undefined, opts)}`;
-    }
-
-    return "Select a date";
-});
-
 async function fetchOrders(currentPage = 1) {
     loading.value = true;
 
@@ -319,126 +351,19 @@ async function fetchOrders(currentPage = 1) {
     if (selectedTag.value) params.append("tag", selectedTag.value);
 
     try {
-        const res = await fetch(`${apiBaseCustom}/orders?${params}`, {
-            headers: { Authorization: authHeader },
+        const res = await request({
+            url: `/orders?${params}`,
+            raw: true, // 👈 this is key to access headers
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-        orders.value = await res.json();
-        totalPages.value = parseInt(res.headers.get("X-WP-TotalPages") || 1);
+        console.log(res);
+        const data = await res.json();
+        orders.value = data;
+        totalPages.value = parseInt(res.headers.get("X-WP-TotalPages") || "1");
     } catch (err) {
         console.error(err);
         message.error("Failed to load orders");
     } finally {
         loading.value = false;
     }
-}
-
-const showCustomRange = ref(false);
-const customRange = ref([new Date(), new Date()]);
-
-const dateRangeOptions = [
-    { label: "All Time", key: "all_time" },
-    { label: "Today", key: "today" },
-    { label: "Yesterday", key: "yesterday" },
-    { label: "Last 7 Days", key: "last_7" },
-    { label: "Last 30 Days", key: "last_30" },
-    { label: "This Month", key: "this_month" },
-    {
-        key: "custom",
-        type: "render",
-        render() {
-            return h("div", { style: "padding: 8px 12px; width: 300px;" }, [
-                h(Datepicker, {
-                    modelValue: customRange.value,
-                    "onUpdate:modelValue": applyCustomRange,
-                    range: true,
-                    format: "dd/MM/yy",
-                    previewFormat: "dd/MM/yy",
-                    enableTimePicker: false,
-                    autoApply: true,
-                    startDate: new Date(),
-                    showNowButton: false,
-                }),
-            ]);
-        },
-    },
-];
-
-function handleDateFilter(key) {
-    showCustomRange.value = false;
-
-    const now = new Date();
-    let from, to;
-
-    switch (key) {
-        case "today":
-            from = to = now;
-            break;
-        case "yesterday":
-            from = to = new Date(now.setDate(now.getDate() - 1));
-            break;
-        case "last_7":
-            from = new Date(now.setDate(now.getDate() - 6));
-            to = new Date();
-            break;
-        case "last_30":
-            from = new Date(now.setDate(now.getDate() - 29));
-            to = new Date();
-            break;
-        case "this_month":
-            from = new Date(now.getFullYear(), now.getMonth(), 1);
-            to = new Date();
-            break;
-        case "all_time":
-            customRange.value = [new Date(), new Date()];
-            page.value = 1;
-            router.replace({
-                path: "/orders",
-                query: {
-                    ...route.query,
-                    page: 1,
-                    date_from: undefined,
-                    date_to: undefined,
-                },
-            });
-            return;
-        case "custom":
-            return; // handled in render
-    }
-
-    customRange.value = [from, to];
-    applyDateFilter(from, to);
-}
-
-function applyCustomRange(value) {
-    if (!Array.isArray(value) || value.length !== 2) return;
-    customRange.value = value;
-    const [from, to] = value;
-    if (from && to) {
-        applyDateFilter(from, to);
-    }
-}
-
-function applyDateFilter(from, to) {
-    const format = (d) => {
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, "0");
-        const day = String(d.getDate()).padStart(2, "0");
-        return `${year}-${month}-${day}`;
-    };
-    router.replace({
-        path: "/orders",
-        query: {
-            ...route.query,
-            date_from: format(from),
-            date_to: format(to),
-        },
-    });
-}
-
-function getMetaValue(row, key) {
-    const entry = (row.meta_data || []).find((m) => m.key === key);
-    return entry ? entry.value : null;
 }
 </script>

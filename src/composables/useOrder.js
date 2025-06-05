@@ -1,5 +1,5 @@
 import { ref, computed, watch } from "vue";
-import { apiBaseCustom, authHeader } from "@/utils/api";
+import { request } from "@/utils/api";
 import { formatOrderDate, setCurrency } from "@/utils/utils";
 
 export function useOrder(orderIdRef) {
@@ -12,10 +12,10 @@ export function useOrder(orderIdRef) {
 
         loadingOrder.value = true;
         try {
-            const res = await fetch(`${apiBaseCustom}/orders/${orderId}`, {
-                headers: { Authorization: authHeader },
+            const json = await request({
+                url: `/orders/${orderId}`,
             });
-            const json = await res.json();
+
             order.value = json;
             console.log("✅ Order loaded:", json);
         } catch (err) {
@@ -26,9 +26,13 @@ export function useOrder(orderIdRef) {
     };
 
     // 🧠 Reactively re-fetch when order ID changes
-    watch(orderIdRef, () => {
-        fetchOrder();
-    }, { immediate: true });
+    watch(
+        orderIdRef,
+        () => {
+            fetchOrder();
+        },
+        { immediate: true }
+    );
 
     // 🎯 Automatically update currency when order changes
     watch(

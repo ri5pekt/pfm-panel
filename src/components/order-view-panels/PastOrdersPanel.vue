@@ -14,7 +14,7 @@
 <script setup>
 import { ref, onMounted, watch } from "vue";
 import { formatOrderDate, formatCurrency } from "@/utils/utils";
-import { apiBaseCustom, authHeader } from "@/utils/api";
+import { request } from "@/utils/api";
 import { h } from "vue";
 
 const props = defineProps({
@@ -64,10 +64,10 @@ async function fetchOrders() {
     loading.value = true;
 
     try {
-        const res = await fetch(`${apiBaseCustom}/orders/by-user/${props.customerId}?page=${page.value}&per_page=10`, {
-            headers: { Authorization: authHeader },
+        const data = await request({
+            url: `/orders/by-user/${props.customerId}?page=${page.value}&per_page=10`,
         });
-        const data = await res.json();
+
         const filtered = data.filter((o) => o.id !== props.excludeOrderId);
 
         if (filtered.length < 10) hasMore.value = false;

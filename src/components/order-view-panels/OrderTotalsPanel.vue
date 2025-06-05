@@ -32,6 +32,7 @@
                 </thead>
                 <tbody>
                     <tr v-for="item in order.line_items" :key="item.id">
+                        <!-- Product Info -->
                         <td>
                             <div class="product-cell">
                                 <img
@@ -49,6 +50,7 @@
                             </div>
                         </td>
 
+                        <!-- Unit Cost -->
                         <td>{{ formatCurrency(item.subtotal / item.quantity) }}</td>
 
                         <!-- Quantity -->
@@ -66,11 +68,11 @@
                             </div>
                             <div v-else>
                                 {{ item.quantity }}
-                                <div v-if="item.qty_refunded > 0" class="refunded-qty">↩ -{{ item.qty_refunded }}</div>
                             </div>
+                            <div v-if="item.qty_refunded > 0" class="refunded-qty">↩ -{{ item.qty_refunded }}</div>
                         </td>
 
-                        <!-- Line total -->
+                        <!-- Total -->
                         <td>
                             <div v-if="refundMode">
                                 <div>{{ formatCurrency(item.total) }}</div>
@@ -88,9 +90,9 @@
                                 <div v-if="parseFloat(item.subtotal) > parseFloat(item.total)" class="line-discount">
                                     {{ formatCurrency(item.subtotal - item.total) }} discount
                                 </div>
-                                <div v-if="item.total_refunded > 0" class="refunded-amount">
-                                    ↩ -{{ formatCurrency(item.total_refunded) }}
-                                </div>
+                            </div>
+                            <div v-if="item.total_refunded > 0" class="refunded-amount">
+                                ↩ -{{ formatCurrency(item.total_refunded) }}
                             </div>
                         </td>
 
@@ -109,9 +111,9 @@
                             </div>
                             <div v-else>
                                 {{ formatCurrency(+item.total_tax) }}
-                                <div v-if="item.refunded_tax > 0" class="refunded-amount">
-                                    ↩ -{{ formatCurrency(item.refunded_tax) }}
-                                </div>
+                            </div>
+                            <div v-if="item.refunded_tax > 0" class="refunded-amount">
+                                ↩ -{{ formatCurrency(item.refunded_tax) }}
                             </div>
                         </td>
                     </tr>
@@ -145,7 +147,10 @@
                     </thead>
                     <tbody>
                         <tr v-for="fee in order.fee_lines" :key="fee.id">
+                            <!-- Fee Name -->
                             <td>{{ fee.name }}</td>
+
+                            <!-- Fee Total -->
                             <td>
                                 <div v-if="refundMode">
                                     {{ formatCurrency(fee.total) }}
@@ -159,11 +164,13 @@
                                 </div>
                                 <div v-else>
                                     {{ formatCurrency(fee.total) }}
-                                    <div v-if="+fee.total_refunded !== 0" class="refunded-amount">
-                                        ↩ -{{ formatCurrency(Math.abs(fee.total_refunded)) }}
-                                    </div>
+                                </div>
+                                <div v-if="+fee.total_refunded !== 0" class="refunded-amount">
+                                    ↩ -{{ formatCurrency(Math.abs(fee.total_refunded)) }}
                                 </div>
                             </td>
+
+                            <!-- Fee Tax -->
                             <td>
                                 <div v-if="refundMode">
                                     {{ formatCurrency(fee.total_tax) }}
@@ -177,9 +184,9 @@
                                 </div>
                                 <div v-else>
                                     {{ formatCurrency(+fee.total_tax) }}
-                                    <div v-if="+fee.refunded_tax !== 0" class="refunded-amount">
-                                        ↩ -{{ formatCurrency(Math.abs(fee.refunded_tax)) }}
-                                    </div>
+                                </div>
+                                <div v-if="+fee.refunded_tax !== 0" class="refunded-amount">
+                                    ↩ -{{ formatCurrency(Math.abs(fee.refunded_tax)) }}
                                 </div>
                             </td>
                         </tr>
@@ -200,7 +207,10 @@
                     </thead>
                     <tbody>
                         <tr v-for="ship in order.shipping_lines" :key="ship.id">
+                            <!-- Method -->
                             <td>{{ ship.method_title }}</td>
+
+                            <!-- Shipping Total -->
                             <td>
                                 <div v-if="refundMode">
                                     {{ formatCurrency(+ship.total) }}
@@ -214,11 +224,13 @@
                                 </div>
                                 <div v-else>
                                     {{ formatCurrency(+ship.total) }}
-                                    <div v-if="+ship.total_refunded !== 0" class="refunded-amount">
-                                        ↩ {{ formatCurrency(ship.total_refunded) }}
-                                    </div>
+                                </div>
+                                <div v-if="+ship.total_refunded !== 0" class="refunded-amount">
+                                    ↩ -{{ formatCurrency(Math.abs(ship.total_refunded)) }}
                                 </div>
                             </td>
+
+                            <!-- Shipping Tax -->
                             <td>
                                 <div v-if="refundMode">
                                     {{ formatCurrency(+ship.total_tax) }}
@@ -232,9 +244,9 @@
                                 </div>
                                 <div v-else>
                                     {{ formatCurrency(+ship.total_tax) }}
-                                    <div v-if="+ship.refunded_tax !== 0" class="refunded-amount">
-                                        ↩ {{ formatCurrency(ship.refunded_tax) }}
-                                    </div>
+                                </div>
+                                <div v-if="+ship.refunded_tax !== 0" class="refunded-amount">
+                                    ↩ -{{ formatCurrency(Math.abs(ship.refunded_tax)) }}
                                 </div>
                             </td>
                         </tr>
@@ -255,12 +267,7 @@
 
             <!-- ─────────── Taxes / Discounts ─────────── -->
             <div v-if="order.tax_lines?.length" class="totals-section">
-                <p><strong>Taxes:</strong></p>
-                <ul class="breakdown-list">
-                    <li v-for="tax in order.tax_lines" :key="tax.id">
-                        {{ tax.rate_code }} — {{ formatCurrency(+tax.tax_total) }}
-                    </li>
-                </ul>
+                <p><strong>Taxes total:</strong> {{ formatCurrency(totalTaxAmount) }}</p>
             </div>
 
             <div v-if="order.coupon_lines?.length" class="totals-section">
@@ -286,6 +293,7 @@
 
             <n-button size="small" type="warning" v-if="!refundMode" @click="enterRefundMode">Refund</n-button>
             <n-space vertical size="small" style="margin-top: 1rem" v-if="refundMode">
+                <div><strong>Total available to refund:</strong> {{ formatCurrency(totalAvailableToRefund) }}</div>
                 <div><strong>Refund amount:</strong> {{ formatCurrency(refundTotalAmount) }}</div>
                 <n-checkbox v-model:checked="refundViaBraintree"> Refund via Braintree </n-checkbox>
                 <n-space>
@@ -309,7 +317,7 @@
 import { ref, computed, watch } from "vue";
 import { useMessage } from "naive-ui";
 import { formatCurrency, setCurrency } from "@/utils/utils";
-import { apiBaseCustom, authHeader } from "@/utils/api";
+import { request } from "@/utils/api";
 
 const props = defineProps({
     order: {
@@ -378,6 +386,15 @@ const hasRefund = computed(
         refundItems.value.some((i) => +i.quantity || +i.total || +i.tax) ||
         refundFees.value.some((f) => +f.total || +f.tax) ||
         refundShipping.value.some((s) => +s.total || +s.tax)
+);
+
+const totalAvailableToRefund = computed(() => {
+    const total = parseFloat(order.value.total || 0);
+    return Math.max(0, total - totalRefunded.value);
+});
+
+const totalTaxAmount = computed(() =>
+    order.value.tax_lines?.reduce((sum, tax) => sum + parseFloat(tax.tax_total || 0), 0).toFixed(2)
 );
 
 /* ── refund mode management ── */
@@ -458,33 +475,36 @@ async function sendRefund() {
     showConfirmModal.value = false;
 
     try {
-        const res = await fetch(`${apiBaseCustom}/orders/${props.orderId}/refund`, {
+        const payload = {
+            items: pendingRefundItems.value.map((i) => ({
+                id: i.id,
+                quantity: i.quantity,
+                total: i.total,
+                tax: i.tax,
+                ...(i.transaction_id ? { transaction_id: i.transaction_id } : {}),
+            })),
+            fees: pendingRefundFees.value,
+            shipping: pendingRefundShipping.value,
+            refund_via_braintree: refundViaBraintree.value ? 1 : 0,
+        };
+
+        const res = await request({
+            url: `/orders/${props.orderId}/refund`,
             method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: authHeader },
-            body: JSON.stringify({
-                items: pendingRefundItems.value.map((i) => ({
-                    id: i.id,
-                    quantity: i.quantity,
-                    total: i.total,
-                    tax: i.tax,
-                    ...(i.transaction_id ? { transaction_id: i.transaction_id } : {}),
-                })),
-                fees: pendingRefundFees.value,
-                shipping: pendingRefundShipping.value,
-                refund_via_braintree: refundViaBraintree.value ? 1 : 0,
-            }),
+            body: payload,
+            raw: true, // 👈 because we want to manually parse response text
         });
 
         const txt = await res.text();
         if (!res.ok) {
-            let err = "Refund failed";
+            let errMsg = "Refund failed";
             try {
                 const json = JSON.parse(txt);
-                err = json.error || json.message || "Unknown error";
+                errMsg = json.error || json.message || "Unknown error";
             } catch {
-                err = txt;
+                errMsg = txt;
             }
-            throw new Error(err);
+            throw new Error(errMsg);
         }
 
         message.success("Refund processed successfully!");
@@ -492,7 +512,7 @@ async function sendRefund() {
         pendingRefundItems.value = [];
         pendingRefundFees.value = [];
         pendingRefundShipping.value = [];
-        emit("updateOrder"); // ask parent to reload data
+        emit("updateOrder");
     } catch (e) {
         message.error(`Refund failed: ${e.message}`);
         console.error(e);

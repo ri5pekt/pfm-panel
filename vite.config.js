@@ -7,7 +7,18 @@ export default defineConfig({
     root: path.resolve(__dirname),
     plugins: [vue()],
     server: {
-        port: 5173,
+        proxy: {
+            "/wp-json": {
+                target: "https://particlestage.wpengine.com",
+                changeOrigin: true,
+                secure: false,
+                configure: (proxy) => {
+                    proxy.on("proxyReq", (proxyReq, req, res) => {
+                        // You can even manually forward your cookies here if needed
+                    });
+                },
+            },
+        },
     },
     resolve: {
         alias: {

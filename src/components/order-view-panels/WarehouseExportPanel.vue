@@ -87,7 +87,7 @@
 
 <script setup>
 import { useDialog, useMessage } from "naive-ui";
-import { apiBaseCustom, authHeader } from "@/utils/api";
+import { request } from "@/utils/api";
 import { ref, computed } from "vue";
 
 const dialog = useDialog();
@@ -134,16 +134,11 @@ async function exportToWarehouse() {
     exporting.value = true;
 
     try {
-        const res = await fetch(`${apiBaseCustom}/orders/${props.orderId}/export-to-warehouse`, {
+        const json = await request({
+            url: `/orders/${props.orderId}/export-to-warehouse`,
             method: "POST",
-            headers: {
-                Authorization: authHeader,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ warehouse: selectedWarehouse.value }),
+            body: { warehouse: selectedWarehouse.value },
         });
-
-        const json = await res.json();
 
         const dialogType = json.success ? dialog.success : dialog.error;
         dialogType({
@@ -168,16 +163,11 @@ async function exportToWarehouse() {
 async function revalidateAddress() {
     validating.value = true;
     try {
-        const response = await fetch(`${apiBaseCustom}/orders/${props.orderId}/revalidate-address`, {
+        const result = await request({
+            url: `/orders/${props.orderId}/revalidate-address`,
             method: "POST",
-            headers: {
-                Authorization: authHeader,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ force: false }),
+            body: { force: false },
         });
-
-        const result = await response.json();
 
         const dialogType = result.success ? dialog.success : dialog.error;
 
@@ -205,15 +195,11 @@ const forceValidateAddress = async () => {
     try {
         forceValidating.value = true;
 
-        const response = await fetch(`${apiBaseCustom}/orders/${props.orderId}/revalidate-address`, {
+        const result = await request({
+            url: `/orders/${props.orderId}/revalidate-address`,
             method: "POST",
-            headers: {
-                Authorization: authHeader,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ force: true }),
+            body: { force: true },
         });
-        const result = await response.json();
 
         const dialogType = result.success ? dialog.success : dialog.error;
 
@@ -231,6 +217,7 @@ const forceValidateAddress = async () => {
             content: "Could not reach the server.",
             positiveText: "Understood",
         });
+        console.error(err);
     } finally {
         forceValidating.value = false;
     }
