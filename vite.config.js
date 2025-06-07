@@ -12,11 +12,6 @@ export default defineConfig({
                 target: "https://particlestage.wpengine.com",
                 changeOrigin: true,
                 secure: false,
-                configure: (proxy) => {
-                    proxy.on("proxyReq", (proxyReq, req, res) => {
-                        // You can even manually forward your cookies here if needed
-                    });
-                },
             },
         },
     },

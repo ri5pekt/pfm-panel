@@ -88,7 +88,7 @@
 <script setup>
 import { useDialog, useMessage } from "naive-ui";
 import { request } from "@/utils/api";
-import { ref, computed } from "vue";
+import { ref, computed, watchEffect } from "vue";
 
 const dialog = useDialog();
 const message = useMessage();
@@ -103,6 +103,10 @@ const warehouseOptions = [
     { label: "Fulfillrite", value: "fulfillrite" },
     { label: "KLB Global", value: "klbglobal" },
     { label: "Green", value: "green" },
+    {
+        label: "Decide based on rules",
+        value: "decide_based_on_rules",
+    },
 ];
 
 const props = defineProps({
@@ -110,6 +114,13 @@ const props = defineProps({
     getMeta: Function,
     trackingNumber: String,
     orderId: [String, Number],
+});
+
+watchEffect(() => {
+    const meta = props.getMeta("warehouse_to_export");
+    if (meta && meta !== "null" && meta !== "undefined") {
+        selectedWarehouse.value = meta;
+    }
 });
 
 const exportStatusLabel = computed(() => {
