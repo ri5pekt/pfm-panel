@@ -37,6 +37,7 @@ function Should-IncludeFile {
 
     return -not (
         $filePath -like "*node_modules*" -or
+        $filePath -like "*tools*" -or
         $filePath -like "*\.git*" -or
         $filePath -like "*dist*" -or
         $filePath -like "*\.vscode*" -or

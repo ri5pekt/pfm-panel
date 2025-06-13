@@ -32,8 +32,8 @@
 
         <div class="filter-field">
             <DateRangeFilter
-                :initial-from="route.query.date_from"
-                :initial-to="route.query.date_to"
+                :initial-from="filters.date_from"
+                :initial-to="filters.date_to"
                 @update:dateRange="handleDateRange"
             />
         </div>
@@ -59,6 +59,7 @@ const filters = props.modelValue;
 const route = useRoute();
 const router = useRouter();
 function handleDateRange(range) {
+    console.log("Date range selected:", range);
     filters.date_from = range?.from || null;
     filters.date_to = range?.to || null;
 }

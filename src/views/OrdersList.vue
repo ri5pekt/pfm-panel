@@ -1,5 +1,5 @@
 <template>
-    <div class="orders-list">
+    <div class="view-wrapper orders-list">
         <div class="page-title">All Orders</div>
 
         <!-- 🔁 Now connected properly with v-model -->

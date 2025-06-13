@@ -203,10 +203,11 @@
   font-family: monospace;
 }
 
-.orders-list {
+#pfm-panel-app {
   padding: 2rem;
   font-family: system-ui, sans-serif;
 }
+
 .orders-list .filters {
   margin-bottom: 1rem;
 }
@@ -370,4 +371,62 @@
 }
 .filter-field .n-select {
   margin-top: 2px;
+}
+
+.date-range-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+.stats-grid .span-2-cols {
+  grid-column: span 2;
+}
+
+.stats-wrapper .main-stats-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 2.5rem;
+}
+.stats-wrapper .main-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 120px;
+}
+.stats-wrapper .stat-value {
+  font-size: 1.75rem;
+  line-height: 1.25;
+  font-weight: 700;
+  color: #222;
+}
+.stats-wrapper .stat-label {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: #888;
+  text-transform: uppercase;
+}
+.stats-wrapper .ppu-stats-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+.stats-wrapper .ppu-stat {
+  flex: 1;
+  text-align: center;
+}
+.stats-wrapper .subscriptions-stats-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2.5rem;
+}
+.stats-wrapper .subscriptions-stat {
+  flex: 1;
+  text-align: center;
 }/*# sourceMappingURL=main.css.map */
