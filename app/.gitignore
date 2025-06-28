@@ -1,0 +1,14 @@
+# Ignore log and text files globally
+*.log
+*.txt
+
+# Node modules and build output
+node_modules/
+app/dist/
+
+# Environment config
+.env
+
+# Optional: OS or IDE-specific files
+.DS_Store
+.vscode/

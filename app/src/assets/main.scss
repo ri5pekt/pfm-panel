@@ -1,0 +1,689 @@
+// main.scss
+// 🔧 Variables
+//https://coolors.co/palette/03045e-023e8a-0077b6-0096c7-00b4d8-48cae4-90e0ef-ade8f4-caf0f8
+$page-padding: 2rem;
+$panel-radius: 6px;
+$panel-bg: #fff;
+$border-color: #0077B6;
+$text-muted: #555;
+$shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+
+body {
+    background: #f0f0f1;
+}
+:root {
+    --text-color-regular: #023E8A;
+    --text-color-special: #0077B6;
+    --text-color-link: #0096C7;
+    --text-color-muted: #0077B6;
+    --color-muted: #b3c1d4;
+}
+
+#pfm-panel-app {
+    color: var(--text-color-regular);
+    .n-tabs .n-tabs-tab {
+        color: inherit;
+    }
+
+    .n-data-table .n-data-table-th .n-data-table-th__title-wrapper .n-data-table-th__title {
+        color: var(--text-color-special);
+    }
+
+    .n-data-table .n-data-table-td a {
+        color: var(--text-color-link);
+    }
+    .n-data-table .n-data-table-td {
+        color: var(--text-color-regular);
+    }   
+
+    .n-text {
+        color: var(--text-color-muted);
+    }
+
+    .n-base-selection .n-base-selection-label {
+        color: var(--text-color-regular);
+    }
+
+    .n-tabs .n-tabs-nav.n-tabs-nav--line-type.n-tabs-nav--top .n-tabs-nav-scroll-content {
+        border-bottom: 1px solid var(--color-muted);
+    }
+}
+
+
+.top-bar {
+    position: relative;
+    .greeting {
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+}
+.top-tabs {
+    margin-bottom: 20px;
+}
+
+// 🧱 Typography & Base
+.page-title {
+    font-size: 2rem;
+    line-height: 1;
+    font-weight: 600;
+    color: inherit;
+    font-family: system-ui, sans-serif;
+}
+
+.view-wrapper {
+    margin-top: 1rem;
+}
+
+.page-top {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+
+.order-view {
+    font-family: system-ui, sans-serif;
+}
+
+.order-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.4fr;
+    gap: 1.5rem;
+    margin-top: 2rem;
+
+    .span-2-cols {
+        grid-column: span 2;
+    }
+}
+
+.subscription-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1.4fr;
+    gap: 1.5rem;
+    margin-top: 2rem;
+
+    .span-2-cols {
+        grid-column: span 2;
+    }
+}
+
+.customer-grid {
+    display: grid;
+    gap: 1.5rem;
+    grid-template-columns: 1fr 1fr 1.4fr;
+    grid-auto-rows: min-content;
+    margin-top: 2rem;
+}
+
+// 📦 Panel Layout
+.panel {
+    border: 1px solid $border-color;
+    border-radius: $panel-radius;
+    padding: 1rem;
+    background: $panel-bg;
+    box-shadow: $shadow;
+
+    h4 {
+        margin: 0;
+        margin-bottom: 1rem;
+        font-size: 1.1rem;
+        color: var(--text-color-special);
+    }
+    hr {
+        margin: 1.5rem 0;
+        border: none;
+        border-top: 1px solid var(--color-muted);
+    }
+
+    h3 {
+        color: white;
+        padding: 0.5rem 1rem;
+        font-size: 1.2rem;
+        margin: -1rem -1rem 1rem -1rem;
+        border-radius: $panel-radius $panel-radius 0 0;
+        background: linear-gradient(to right, #4b5563, #1f2937); // default: dark gray
+    }
+
+    &:nth-child(5n + 1) h3 {
+        background: #023E8A; 
+    }
+
+    &:nth-child(5n + 2) h3 {
+        background: #0077B6;
+    }
+
+    &:nth-child(5n + 3) h3 {
+        background: #0096C7;
+    }
+
+    &:nth-child(5n + 4) h3 {
+        background: #0077B6;
+    }
+    &:nth-child(5n + 5) h3 {
+        background: #023E8A; 
+    }
+}
+
+.load-more-wrapper {
+    display: flex;
+    justify-content: center;
+    margin-top: 1rem;
+}
+
+// 📝 Notes Panel
+.notes-scroll {
+    max-height: 750px;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+}
+
+.past-orders-scroll {
+    max-height: 450px;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+}
+
+.note {
+    border-bottom: 1px solid var(--color-muted);
+    padding: 0.55rem 0;
+
+    .note-text {
+        white-space: pre-wrap;
+        margin-bottom: 0.25rem;
+        font-size: 1rem;
+        line-height: 1.5;
+    }
+
+    .note-meta {
+        font-size: 0.7rem;
+        color: #fff;
+        background: var(--color-muted);
+        text-align: center;
+
+        abbr {
+            text-decoration: none;
+        }
+    }
+}
+
+// 📦 Product Table
+.product-table {
+    width: 100%;
+    border-collapse: collapse;
+
+    th,
+    td {
+        text-align: left;
+        padding: 0.75rem;
+        border-bottom: 1px solid #eee;
+        vertical-align: top;
+    }
+
+    th {
+        background: #f5f5f5;
+        font-weight: 600;
+        font-size: 0.95rem;
+    }
+
+    td {
+        font-size: 0.95rem;
+    }
+
+    .line-discount {
+        color: #d32f2f;
+        font-size: 0.8rem;
+        margin-top: 2px;
+    }
+
+    .refunded-amount,
+    .refunded-qty {
+        color: #b91c1c;
+        font-size: 0.8rem;
+        margin-top: 2px;
+
+        .dashicons {
+            font-size: 0.9rem;
+            margin-right: 4px;
+            vertical-align: middle;
+        }
+    }
+}
+
+.address-columns {
+    display: flex;
+    gap: 24px;
+    .address-section {
+        flex: 1;
+        h4 {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .n-input {
+            margin-bottom: 8px;
+            width: 100%;
+        }
+    }
+}
+
+.product-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    position: relative;
+}
+
+.remove-icon {
+    position: absolute;
+    top: -5px;
+    left: -5px;
+    color: #d03050;
+    z-index: 2;
+    cursor: pointer;
+    background: #fff;
+    border-radius: 50%;
+}
+
+.product-image {
+    width: 48px;
+    height: 48px;
+    object-fit: cover;
+    border-radius: $panel-radius;
+}
+
+// 💰 Order Totals
+.totals-list {
+    p {
+        margin: 0.4rem 0;
+        font-size: 0.95rem;
+    }
+
+    .totals-section {
+        margin-bottom: 1rem;
+    }
+
+    .final-totals p {
+        font-weight: 500;
+        font-size: 1rem;
+    }
+
+    .totals-divider {
+        border: none;
+        border-top: 1px solid #ccc;
+        margin: 1rem 0;
+    }
+    .refunded-row {
+        color: #b91c1c;
+    }
+    .coupon-list {
+        list-style: none;
+        padding-left: 0;
+
+        li {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .coupon-code {
+            display: inline-block;
+            background: #f3f4f6;
+            color: #111;
+            padding: 2px 6px;
+            font-size: 0.85rem;
+            border-radius: 4px;
+            font-weight: 500;
+            font-family: monospace;
+        }
+    }
+}
+
+#pfm-panel-app {
+    padding: 2rem;
+    font-family: system-ui, sans-serif;
+}
+
+// 📄 Orders List Styles
+.orders-list {
+    .n-data-table {
+        font-size: 0.95rem;
+    }
+
+    .order-id {
+        font-weight: 600;
+        color: #333;
+    }
+
+    .order-status {
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        display: inline-block;
+        text-transform: capitalize;
+
+        &.processing {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        &.pending {
+            background: #9e9e9e;
+            color: #fff;
+        }
+
+        &.completed {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
+        &.failed {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        &.on-hold {
+            background: #fef3c7;
+            color: #92400e;
+        }
+    }
+
+    .breakdown-list {
+        padding-left: 1.2rem;
+        margin: 0.25rem 0 1rem;
+        list-style: disc;
+        font-size: 0.95rem;
+    }
+}
+
+.subscriptions-list {
+    margin-top: 1rem;
+    .n-data-table {
+        font-size: 0.95rem;
+        margin-top: 1rem;
+    }
+    [data-col-key="recurring_total"] {
+        bdi {
+            font-weight: 700;
+            .woocommerce-Price-currencySymbol {
+                font-size: 0.85rem;
+            }
+        }
+    }
+    .subscription-status {
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        display: inline-block;
+        text-transform: capitalize;
+
+        &.active {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        &.pending-cancel {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        &.on-hold {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        &.cancelled {
+            background: #f3f4f6;
+            color: #9ca3af;
+        }
+
+        &.expired {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        &.pending {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+    }
+}
+
+// 🚚 Warehouse & Export Tags
+.warehouse-export-tag,
+.warehouse-export-status-tag {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 0.85rem;
+    border-radius: 4px;
+    color: #fff;
+    text-transform: capitalize;
+}
+
+.warehouse-export-pending {
+    background: #9e9e9e;
+}
+.warehouse-export-exported {
+    background: #4caf50;
+}
+.warehouse-export-failed {
+    background: #f44336;
+}
+.warehouse-export-none {
+    background: #ccc;
+    color: #000;
+}
+
+.warehouse-export-shipstation {
+    background: #9e9e9e;
+}
+.warehouse-export-shipstation.warehouse-export-exported {
+    background: #0c5b36;
+}
+
+.warehouse-shipbob.warehouse-export-exported {
+    background: #0073aa;
+}
+.warehouse-fulfillrite.warehouse-export-exported {
+    background: #e70358;
+}
+.warehouse-klbglobal.warehouse-export-exported {
+    background: #e66e50;
+}
+.warehouse-green.warehouse-export-exported {
+    background: #009688;
+}
+
+.warehouse-export-status-pending {
+    background: #9e9e9e;
+}
+.warehouse-export-status-failed {
+    background: #f44336;
+}
+.warehouse-export-status-exported {
+    background: #4caf50;
+}
+.warehouse-export-status-shipped {
+    background: #2196f3;
+}
+
+// 📬 Address Validation Tags
+.address-validation-tag {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 0.85rem;
+    border-radius: 4px;
+    color: #fff;
+    text-transform: capitalize;
+}
+
+.address-validation-status-pending-validation {
+    background: #9e9e9e;
+} /* gray */
+.address-validation-status-invalid {
+    background: #e91e63;
+} /* pink/red */
+.address-validation-status-valid {
+    background: #4caf50;
+} /* green */
+.address-validation-status-unavailable {
+    background: #c5bd7a;
+} /* khaki */
+.address-validation-status-not-validated {
+    background: #cccccc;
+} /* light gray */
+
+.address-status-pill,
+.warehouse-export-panel .warehouse-export-tag,
+.warehouse-export-panel .warehouse-export-status-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 6px;
+    color: #fff;
+    margin-left: 6px;
+    font-size: 0.85rem;
+    text-transform: capitalize;
+}
+
+.address-actions {
+    margin-top: 20px;
+}
+
+.warehouse-actions {
+    margin-top: 20px;
+}
+// 🔍 Filters
+.filters {
+    margin: 1rem 0;
+}
+.filter-field {
+    display: flex;
+    flex-direction: column;
+    min-width: 150px;
+    gap: 4px;
+    .row {
+        display: flex;
+        align-items: stretch;
+        gap: 8px;
+        button {
+            height: auto;
+        }
+        .n-select {
+            margin: 0;
+        }
+    }
+    .n-select {
+        margin-top: 2px;
+    }
+}
+
+.bulk-edit-panel {
+    margin-top: 1rem;
+}
+
+.date-range-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1fr;
+    gap: 1.5rem;
+    margin-top: 2rem;
+
+    .span-2-cols {
+        grid-column: span 2;
+    }
+}
+
+.stats-wrapper {
+    .main-stats-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 2.5rem;
+    }
+    .main-stat {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-width: 120px;
+    }
+    .stat-value {
+        font-size: 1.75rem;
+        line-height: 1.25;
+        font-weight: 700;
+        color: #222;
+    }
+    .stat-label {
+        font-size: 0.8rem;
+        font-weight: 400;
+        color: #888;
+        text-transform: uppercase;
+    }
+
+    .ppu-stats-row {
+        display: flex;
+        flex-direction: column;
+        gap: 2.5rem;
+    }
+    .ppu-stat {
+        flex: 1;
+        text-align: center;
+    }
+
+    .subscriptions-stats-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2.5rem;
+    }
+    .subscriptions-stat {
+        flex: 1;
+        text-align: center;
+    }
+}
+
+.general-info-panel {
+    p {
+        margin: 0.5rem 0;
+    }
+}
+
+.subscription-info {
+    .subscription-status {
+        display: inline-block;
+        padding: 0.15rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.9em;
+        text-transform: capitalize;
+    }
+    .subscription-status.active {
+        background: #d1fae5;
+        color: #065f46;
+    }
+    .subscription-status.pending-cancel,
+    .subscription-status.on-hold {
+        background: #fef3c7;
+        color: #92400e;
+    }
+    .subscription-status.cancelled {
+        background: #f3f4f6;
+        color: #9ca3af;
+    }
+    .subscription-status.expired {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+    .subscription-status.pending {
+        background: #e0e7ff;
+        color: #3730a3;
+    }
+
+    .address-section {
+        flex: 1;
+    }
+}
