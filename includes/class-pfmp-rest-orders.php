@@ -82,7 +82,6 @@ class PFMP_REST_Orders {
             'callback' => [$this, 'get_products_by_category'],
             'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
         ]);
-<<<<<<< HEAD
 
         register_rest_route('pfm-panel/v1', '/orders/(?P<order_id>\d+)/notes', [
             'methods'  => 'GET',
@@ -121,8 +120,6 @@ class PFMP_REST_Orders {
         }
 
         return $formatted;
-=======
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
     }
 
     public function get_products_by_category(WP_REST_Request $request) {
@@ -168,13 +165,10 @@ class PFMP_REST_Orders {
         $order_id = absint($request['id']);
         $params = $request->get_json_params();
 
-<<<<<<< HEAD
         $current_user = wp_get_current_user();
         $admin_name = $current_user->display_name ?? 'Admin';
         $admin_roles = $current_user->roles ?? [];
 
-=======
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
         if (!$order_id || !($order = wc_get_order($order_id))) {
             return new WP_Error('invalid_order', 'Order not found', ['status' => 404]);
         }
@@ -403,11 +397,7 @@ class PFMP_REST_Orders {
         $auto_tax = !empty($params['auto_tax']);
 
         if ($updated) {
-<<<<<<< HEAD
             $order->add_order_note('Order items were edited by ' . $admin_name);
-=======
-            $order->add_order_note('Order items were edited by admin');
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
             if ($auto_tax) {
                 if (class_exists('WC_Complyt_Tax') && method_exists('WC_Complyt_Tax', 'init') && method_exists('WC_Complyt_Tax', 'get_instance')) {
                     WC_Complyt_Tax::init();
@@ -491,13 +481,10 @@ class PFMP_REST_Orders {
         $action = sanitize_text_field($request->get_param('action'));
         $value = sanitize_text_field($request->get_param('value'));
 
-<<<<<<< HEAD
         $current_user = wp_get_current_user();
         $admin_name = $current_user->display_name ?? 'Admin';
         $admin_roles = $current_user->roles ?? [];
 
-=======
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
         if (!is_array($ids) || empty($action)) {
             return new WP_Error('invalid_request', 'Invalid payload.', ['status' => 400]);
         }
@@ -509,11 +496,7 @@ class PFMP_REST_Orders {
 
             if ($action === 'change_status') {
                 $order->set_status($value);
-<<<<<<< HEAD
                 $order->add_order_note("Status changed to '$value' by $admin_name via bulk action.");
-=======
-                $order->add_order_note("Status changed to '$value' by admin via bulk action.");
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
                 $order->save();
                 $results[] = $id;
             }
@@ -531,11 +514,7 @@ class PFMP_REST_Orders {
                     $wex_plugin->send_order_to_warehouse($warehouse_slug, $id);
                     $order->update_meta_data('warehouse_to_export', $warehouse_slug);
                     $order->update_meta_data('warehouse_export_status', 'exported');
-<<<<<<< HEAD
                     $order->add_order_note("Bulk-exported to {$warehouse_slug} by $admin_name.");
-=======
-                    $order->add_order_note("Bulk-exported to {$warehouse_slug}.");
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
                     $order->save();
                 }
             }
@@ -551,13 +530,10 @@ class PFMP_REST_Orders {
         $order_id = absint($request->get_param('order_id'));
         $warehouse_slug = sanitize_text_field($request->get_param('warehouse'));
 
-<<<<<<< HEAD
         $current_user = wp_get_current_user();
         $admin_name = $current_user->display_name ?? 'Admin';
         $admin_roles = $current_user->roles ?? [];
 
-=======
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
         if ($warehouse_slug == "decide_based_on_rules") $decide = true;
         else $decide = false;
 
@@ -593,11 +569,7 @@ class PFMP_REST_Orders {
             $order->update_meta_data('warehouse_export_status', 'exported');
 
 
-<<<<<<< HEAD
             $note = sprintf(__('Order manually exported to %s by %s.', 'warehouse-export'), $warehouse_slug, $admin_name);
-=======
-            $note = sprintf(__('Order manually exported to %s by admin.', 'warehouse-export'), $warehouse_slug);
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
             $order->add_order_note($note);
             $order->save();
 
@@ -622,13 +594,9 @@ class PFMP_REST_Orders {
         $params = $request->get_json_params();
         $force = !empty($params['force']);
 
-<<<<<<< HEAD
         $current_user = wp_get_current_user();
         $admin_name = $current_user->display_name ?? 'Admin';
         $admin_roles = $current_user->roles ?? [];
-=======
-
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
 
         if (!$order_id) {
 
@@ -644,11 +612,7 @@ class PFMP_REST_Orders {
             }
 
             $order->update_meta_data('validate_address_status', 'valid');
-<<<<<<< HEAD
             $order->add_order_note(__("Address status manually forced to VALID by $admin_name.", 'warehouse-export'));
-=======
-            $order->add_order_note(__('Address status manually forced to VALID by admin.', 'warehouse-export'));
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
             $order->save();
 
 
@@ -879,13 +843,10 @@ class PFMP_REST_Orders {
             return new WP_Error('refund-error', 'Missing transaction ID for this order.');
         }
 
-<<<<<<< HEAD
         $current_user = wp_get_current_user();
         $admin_name = $current_user->display_name ?? 'Admin';
         $admin_roles = $current_user->roles ?? [];
 
-=======
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
         $settings = get_option('woocommerce_braintree_api_settings');
 
         $environment = $settings['environment'];
@@ -913,16 +874,10 @@ class PFMP_REST_Orders {
                 $refund_id = $result->transaction->id;
 
                 $order->add_order_note(sprintf(
-<<<<<<< HEAD
                     '✅ Refund processed in Braintree. Amount: %s. Refund ID: %s. By %s.',
                     wc_price($amount, ['currency' => $order->get_currency()]),
                     $refund_id,
                     $admin_name
-=======
-                    '✅ Refund processed in Braintree. Amount: %s. Refund ID: %s',
-                    wc_price($amount, ['currency' => $order->get_currency()]),
-                    $refund_id
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
                 ));
                 $order->update_meta_data('_braintree_refund_id', $refund_id);
                 $order->save();
@@ -943,6 +898,8 @@ class PFMP_REST_Orders {
 
 
     public function get_orders_by_user_id(WP_REST_Request $request) {
+        global $wpdb;
+
         $user_id = absint($request['user_id']);
         if (!$user_id) {
             return new WP_Error('invalid_user', 'Invalid user ID.', ['status' => 400]);
@@ -950,7 +907,8 @@ class PFMP_REST_Orders {
 
         $per_page = absint($request->get_param('per_page')) ?: 10;
         $page = absint($request->get_param('page')) ?: 1;
-        $per_page += 1;
+
+        // 1. Live Orders (standard WooCommerce)
         $args = [
             'customer_id' => $user_id,
             'limit'       => $per_page,
@@ -960,34 +918,92 @@ class PFMP_REST_Orders {
             'status'      => array_keys(wc_get_order_statuses())
         ];
 
-
+        $live_orders = [];
         try {
             $orders = wc_get_orders($args);
-            return array_map(function ($order) {
-                return [
+            foreach ($orders as $order) {
+                $live_orders[] = [
                     'id' => $order->get_id(),
                     'status' => $order->get_status(),
                     'total' => $order->get_total(),
                     'currency' => $order->get_currency(),
                     'date_created' => $order->get_date_created() ? $order->get_date_created()->date('Y-m-d H:i:s') : null,
+                    'is_archived' => false,
                 ];
-            }, $orders);
+            }
         } catch (Throwable $e) {
-            return new WP_Error('order_fetch_failed', $e->getMessage(), ['status' => 500]);
+            // Optionally log or handle error
         }
+
+        // 2. Archived Orders (optimized single query)
+        $archived_orders = [];
+        try {
+            $offset = ($page - 1) * $per_page;
+            $sql = $wpdb->prepare(
+                "SELECT 
+                p.ID, 
+                p.post_status, 
+                p.post_date_gmt,
+                MAX(CASE WHEN pm.meta_key = '_order_total' THEN pm.meta_value END) AS order_total,
+                MAX(CASE WHEN pm.meta_key = '_order_currency' THEN pm.meta_value END) AS order_currency
+            FROM yom_archive_orders_posts p
+            JOIN yom_archive_orders_postmeta m ON p.ID = m.post_id
+            LEFT JOIN yom_archive_orders_postmeta pm ON p.ID = pm.post_id
+            WHERE p.post_type = 'shop_order'
+                AND p.post_status NOT IN ('trash', 'auto-draft')
+                AND m.meta_key = '_customer_user'
+                AND m.meta_value = %s
+            GROUP BY p.ID
+            ORDER BY p.post_date_gmt DESC
+            LIMIT %d OFFSET %d",
+                $user_id,
+                $per_page,
+                $offset
+            );
+            $archived_posts = $wpdb->get_results($sql);
+
+            foreach ($archived_posts as $post) {
+                $archived_orders[] = [
+                    'id' => intval($post->ID),
+                    'status' => $post->post_status,
+                    'total' => isset($post->order_total) ? floatval($post->order_total) : null,
+                    'currency' => isset($post->order_currency) ? $post->order_currency : '',
+                    'date_created' => $post->post_date_gmt,
+                    'is_archived' => true,
+                ];
+            }
+        } catch (Throwable $e) {
+            // Optionally log or handle error
+        }
+
+        // 3. Merge and sort
+        $all_orders = array_merge($live_orders, $archived_orders);
+        usort($all_orders, function ($a, $b) {
+            return strtotime($b['date_created']) <=> strtotime($a['date_created']);
+        });
+
+        // 4. Remove duplicates
+        $seen = [];
+        $deduped = [];
+        foreach ($all_orders as $order) {
+            if (isset($seen[$order['id']])) continue;
+            $deduped[] = $order;
+            $seen[$order['id']] = true;
+        }
+
+        // 5. Paginate after merging (optional, or just let frontend handle it)
+        $result = array_slice($deduped, 0, $per_page);
+
+        return rest_ensure_response($result);
     }
 
 
     public function update_order(WP_REST_Request $request) {
         $order_id = absint($request['id']);
         $order = wc_get_order($order_id);
-<<<<<<< HEAD
         $current_user = wp_get_current_user();
         $admin_name = $current_user->display_name ?? 'Admin';
         $admin_roles = $current_user->roles ?? [];
-=======
-
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
         if (!$order) {
             return new WP_Error('not_found', 'Order not found', ['status' => 404]);
         }
@@ -997,10 +1013,7 @@ class PFMP_REST_Orders {
 
         if (isset($params['status'])) {
             $order->set_status(sanitize_key($params['status']));
-<<<<<<< HEAD
             $order->add_order_note("Order status changed to '{$params['status']}' by $admin_name");
-=======
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
         }
 
         // Update meta
@@ -1054,11 +1067,7 @@ class PFMP_REST_Orders {
 
             // Add order note summarizing updates
             if (!empty($updated_fields)) {
-<<<<<<< HEAD
                 $note = "<b>Customer info updated by $admin_name</b><br><br>";
-=======
-                $note = '<b>👤 Customer info updated by admin</b><br><br>';
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
                 $note .= '🔄 <b>Billing and Shipping details were updated.</b><br><br>';
                 $note .= '✅ <b>Changes applied to:</b> ' . ($updated_profile ? 'Order and Customer Profile' : 'Order only');
 

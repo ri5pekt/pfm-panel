@@ -1,9 +1,5 @@
 <?php
-<<<<<<< HEAD
 // class-pfmp-admin.php
-=======
-
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
 defined('ABSPATH') || exit;
 
 class PFMP_Admin {
@@ -14,7 +10,6 @@ class PFMP_Admin {
         add_action('add_meta_boxes', [$this, 'add_order_meta_metabox']);
     }
 
-<<<<<<< HEAD
     public static function register_roles() {
         // 🎩 Add or update custom PFM roles
         $roles = [
@@ -48,8 +43,6 @@ class PFMP_Admin {
         }
     }
 
-=======
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
 
     public function add_order_meta_metabox() {
         $screen = class_exists(\Automattic\WooCommerce\Internal\DataStores\Orders\CustomOrdersTableController::class)
@@ -115,11 +108,7 @@ class PFMP_Admin {
         add_menu_page(
             'PFM Panel',
             'PFM Panel',
-<<<<<<< HEAD
             'access_pfm_panel',
-=======
-            'manage_woocommerce',
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
             'pfm-panel',
             [$this, 'render_panel_page'],
             'dashicons-admin-generic',
@@ -130,11 +119,7 @@ class PFMP_Admin {
             'pfm-panel',
             'PFM Tools',
             'Tools',
-<<<<<<< HEAD
             'access_pfm_panel',
-=======
-            'manage_woocommerce',
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
             'pfm-tools',
             [$this, 'render_tools_page']
         );
@@ -295,7 +280,6 @@ class PFMP_Admin {
             return;
         }
 
-<<<<<<< HEAD
         $current_user = wp_get_current_user();
         $user_info = [
             'first_name' => $current_user->user_firstname,
@@ -305,44 +289,28 @@ class PFMP_Admin {
         ];
 
 
-=======
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
         $nonce = wp_create_nonce('wp_rest');
 
         wp_enqueue_script(
             'pfm-panel-js',
-<<<<<<< HEAD
             plugin_dir_url(dirname(__FILE__)) . 'dist/assets/app.js',
             [],
             filemtime(plugin_dir_url(dirname(__FILE__)) . 'dist/assets/app.js'),
-=======
-            plugin_dir_url(__FILE__) . 'dist/assets/app.js',
-            [],
-            filemtime(plugin_dir_path(__FILE__) . 'dist/assets/app.js'),
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
             true
         );
 
 
         wp_localize_script('pfm-panel-js', 'PFMPanelData', [
             'restUrl' => rest_url('pfm-panel/v1/orders'),
-<<<<<<< HEAD
             'nonce'   => $nonce,
             'user'    => $user_info,
-=======
-            'nonce'   => $nonce
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
         ]);
 
         wp_enqueue_style(
             'pfm-panel-css',
             plugin_dir_url(__FILE__) . 'dist/assets/app.css',
             [],
-<<<<<<< HEAD
             filemtime(plugin_dir_url(dirname(__FILE__)) . 'dist/assets/app.css')
-=======
-            filemtime(plugin_dir_path(__FILE__) . 'dist/assets/app.css')
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
         );
     }
 }

@@ -49,7 +49,6 @@ class PFMP_REST_Subscriptions {
                 'action' => ['required' => true],
             ],
         ]);
-<<<<<<< HEAD
 
 
         register_rest_route('pfm-panel/v1', '/subscriptions/by-user/(?P<id>\d+)', [
@@ -119,8 +118,6 @@ class PFMP_REST_Subscriptions {
             ];
         }
         return $result;
-=======
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
     }
 
     function handle_subscription_action(WP_REST_Request $request) {
@@ -148,13 +145,10 @@ class PFMP_REST_Subscriptions {
         $id = absint($request['id']);
         $params = $request->get_json_params();
 
-<<<<<<< HEAD
         $current_user = wp_get_current_user();
         $admin_name = $current_user->display_name ?? 'Admin';
         $admin_roles = $current_user->roles ?? [];
 
-=======
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
         if (!function_exists('wcs_get_subscription')) {
             return new WP_Error('missing_wc_subs', 'WooCommerce Subscriptions is not installed.', ['status' => 500]);
         }
@@ -257,11 +251,7 @@ class PFMP_REST_Subscriptions {
 
         // Recalculate tax totals and fix tax lines
         if ($updated) {
-<<<<<<< HEAD
             $sub->add_order_note("Subscription items were edited by $admin_name.");
-=======
-            $sub->add_order_note('Subscription items were edited by admin.');
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
             if ($auto_tax) {
                 if (class_exists('WC_Complyt_Tax') && method_exists('WC_Complyt_Tax', 'init') && method_exists('WC_Complyt_Tax', 'get_instance')) {
                     WC_Complyt_Tax::init();
@@ -388,13 +378,10 @@ class PFMP_REST_Subscriptions {
             return new WP_Error('not_found', 'Subscription not found', ['status' => 404]);
         }
 
-<<<<<<< HEAD
         $current_user = wp_get_current_user();
         $admin_name = $current_user->display_name ?? 'Admin';
         $admin_roles = $current_user->roles ?? [];
 
-=======
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
         $params = $request->get_json_params();
         $updated_fields = [];
 
@@ -519,11 +506,7 @@ class PFMP_REST_Subscriptions {
                     }
                 }
                 $other_sub->save();
-<<<<<<< HEAD
                 $other_sub->add_order_note("Billing and/or shipping info updated via 'Update all user Subscriptions' option by $admin_name.");
-=======
-                $other_sub->add_order_note('Billing and/or shipping info updated via "Update all user Subscriptions" option.');
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
             }
         }
 
@@ -532,7 +515,6 @@ class PFMP_REST_Subscriptions {
 
             // Add a note summarizing updates
             if (!empty($updated_fields)) {
-<<<<<<< HEAD
                 $note = "<b>🔄 Subscription updated by $admin_name</b><br><br>";
                 $note .= '<b>Customer info updated</b><br>';
                 if ($updated_profile) {
@@ -540,15 +522,6 @@ class PFMP_REST_Subscriptions {
                 }
                 if (!empty($params['update_all_subscriptions'])) {
                     $note .= 'All user subscriptions updated.<br>';
-=======
-                $note = '<b>🔄 Subscription updated by admin</b><br><br>';
-                $note .= '✅ <b>Customer info updated</b><br>';
-                if ($updated_profile) {
-                    $note .= '👤 Changes applied to customer profile as well.<br>';
-                }
-                if (!empty($params['update_all_subscriptions'])) {
-                    $note .= '🔁 All user subscriptions updated.<br>';
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
                 }
                 $sub->add_order_note($note);
                 $sub->save();

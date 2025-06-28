@@ -1,3 +1,4 @@
+<!-- CustomerView.vue --> 
 <template>
     <div class="customer-view">
         <div class="page-top">

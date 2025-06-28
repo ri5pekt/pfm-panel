@@ -1,4 +1,4 @@
-<!-- CustomerFiltersPanel.vue -->
+<!-- PastOrdersPanel.vue -->
 <template>
     <div class="panel past-orders-panel span-2-cols">
         <h3>Past Orders</h3>
@@ -13,10 +13,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from "vue";
+import { ref, onMounted, watch, h } from "vue";
 import { formatOrderDate, formatCurrency } from "@/utils/utils";
 import { request } from "@/utils/api";
-import { h } from "vue";
+import { NTag } from "naive-ui";
 
 const props = defineProps({
     customerId: Number,
@@ -33,7 +33,23 @@ const columns = [
         title: "Order ID",
         key: "id",
         render(row) {
-            return h("a", { href: `#/orders/${row.id}` }, `#${row.id}`);
+            const children = [
+                h("a", { href: `#/orders/${row.id}` }, `#${row.id}`)
+            ];
+            if (row.is_archived) {
+                children.push(
+                    h(
+                        NTag,
+                        {
+                            type: "warning",
+                            size: "small",
+                            style: "margin-left: 8px; vertical-align: middle"
+                        },
+                        { default: () => "Archived" }
+                    )
+                );
+            }
+            return h("span", children);
         },
     },
     {
@@ -47,7 +63,7 @@ const columns = [
         title: "Status",
         key: "status",
         render(row) {
-            return row.status.charAt(0).toUpperCase() + row.status.slice(1);
+            return row.status ? row.status.charAt(0).toUpperCase() + row.status.slice(1) : "";
         },
     },
     {
@@ -60,7 +76,6 @@ const columns = [
 ];
 
 async function fetchOrders() {
-    console.log(props);
     if (!props.customerId) return;
     loading.value = true;
 

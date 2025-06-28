@@ -39,10 +39,7 @@ class PFMP_Utils {
         $remote_ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
         $whitelisted_ips = [
             '77.124.27.149',
-<<<<<<< HEAD
-            '199.203.127.85'
-=======
->>>>>>> f5b007a70eb1c253267053db148c7ed2e27286a9
+            '77.127.100.144'
         ];
 
         if (in_array($remote_ip, $whitelisted_ips)) {
