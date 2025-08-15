@@ -3,10 +3,10 @@ body {
 }
 
 :root {
-  --text-color-regular: #023E8A;
-  --text-color-special: #0077B6;
-  --text-color-link: #0096C7;
-  --text-color-muted: #0077B6;
+  --text-color-regular: #023e8a;
+  --text-color-special: #0077b6;
+  --text-color-link: #0096c7;
+  --text-color-muted: #0077b6;
   --color-muted: #b3c1d4;
 }
 
@@ -33,6 +33,10 @@ body {
 }
 #pfm-panel-app .n-tabs .n-tabs-nav.n-tabs-nav--line-type.n-tabs-nav--top .n-tabs-nav-scroll-content {
   border-bottom: 1px solid var(--color-muted);
+}
+
+.orders-table {
+  margin-top: 1rem;
 }
 
 .top-bar {
@@ -66,6 +70,13 @@ body {
   align-items: center;
   gap: 24px;
 }
+.page-top .buttons-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  justify-content: flex-end;
+}
 
 .order-view {
   font-family: system-ui, sans-serif;
@@ -78,6 +89,16 @@ body {
   margin-top: 2rem;
 }
 .order-grid .span-2-cols {
+  grid-column: span 2;
+}
+
+.reports-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+.reports-grid .span-2-cols {
   grid-column: span 2;
 }
 
@@ -94,13 +115,13 @@ body {
 .customer-grid {
   display: grid;
   gap: 1.5rem;
-  grid-template-columns: 1fr 1fr 1.4fr;
+  grid-template-columns: 1fr 1fr 1fr;
   grid-auto-rows: min-content;
   margin-top: 2rem;
 }
 
 .panel {
-  border: 1px solid #0077B6;
+  border: 1px solid #0077b6;
   border-radius: 6px;
   padding: 1rem;
   background: #fff;
@@ -126,19 +147,19 @@ body {
   background: linear-gradient(to right, #4b5563, #1f2937);
 }
 .panel:nth-child(5n+1) h3 {
-  background: #023E8A;
+  background: #023e8a;
 }
 .panel:nth-child(5n+2) h3 {
-  background: #0077B6;
+  background: #0077b6;
 }
 .panel:nth-child(5n+3) h3 {
-  background: #0096C7;
+  background: #0096c7;
 }
 .panel:nth-child(5n+4) h3 {
-  background: #0077B6;
+  background: #0077b6;
 }
 .panel:nth-child(5n+5) h3 {
-  background: #023E8A;
+  background: #023e8a;
 }
 
 .load-more-wrapper {
@@ -149,6 +170,12 @@ body {
 
 .notes-scroll {
   max-height: 750px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.report-list {
+  max-height: 350px;
   overflow-y: auto;
   padding-right: 0.5rem;
 }
@@ -227,8 +254,13 @@ body {
   font-size: 14px;
   font-weight: bold;
   margin-bottom: 8px;
+  white-space: nowrap;
 }
-.address-columns .address-section .n-input {
+.address-columns .address-section .n-button--tiny-type {
+  margin-bottom: 8px;
+}
+.address-columns .address-section .n-input,
+.address-columns .address-section .n-select {
   margin-bottom: 8px;
   width: 100%;
 }
@@ -317,6 +349,7 @@ body {
   font-weight: 500;
   display: inline-block;
   text-transform: capitalize;
+  white-space: nowrap;
 }
 .orders-list .order-status.processing {
   background: #d1fae5;
@@ -397,8 +430,10 @@ body {
   padding: 2px 6px;
   font-size: 0.85rem;
   border-radius: 4px;
+  background: #9e9e9e;
   color: #fff;
   text-transform: capitalize;
+  white-space: nowrap;
 }
 
 .warehouse-export-pending {
@@ -426,19 +461,23 @@ body {
   background: #0c5b36;
 }
 
-.warehouse-shipbob.warehouse-export-exported {
+.warehouse-shipbob.warehouse-export-exported,
+.warehouse-shipbob.warehouse-export-shipped {
   background: #0073aa;
 }
 
-.warehouse-fulfillrite.warehouse-export-exported {
+.warehouse-fulfillrite.warehouse-export-exported,
+.warehouse-fulfillrite.warehouse-export-shipped {
   background: #e70358;
 }
 
-.warehouse-klbglobal.warehouse-export-exported {
+.warehouse-klbglobal.warehouse-export-exported,
+.warehouse-klbglobal.warehouse-export-shipped {
   background: #e66e50;
 }
 
-.warehouse-green.warehouse-export-exported {
+.warehouse-green.warehouse-export-exported,
+.warehouse-green.warehouse-export-shipped {
   background: #009688;
 }
 
@@ -589,8 +628,17 @@ body {
   text-align: center;
 }
 
-.general-info-panel p {
+.general-info-panel p,
+.customer-info-panel p {
   margin: 0.5rem 0;
+}
+.general-info-panel .address-columns p,
+.customer-info-panel .address-columns p {
+  margin: 0.25rem 0;
+}
+.general-info-panel .address-columns strong + p,
+.customer-info-panel .address-columns strong + p {
+  margin-top: 0rem;
 }
 
 .subscription-info .subscription-status {
@@ -623,4 +671,203 @@ body {
 }
 .subscription-info .address-section {
   flex: 1;
+}
+
+.timeline-list {
+  margin-top: 1rem;
+  padding-left: 0;
+  list-style: none;
+}
+
+.timeline-entry {
+  margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.timeline-entry small {
+  border-right: 2px solid var(--color-muted);
+  padding-right: 8px;
+}
+
+.cols {
+  display: flex;
+  gap: 32px;
+}
+.cols .col {
+  flex: 1;
+}
+
+.order-popover {
+  font-size: 13px;
+  min-width: 280px;
+  min-height: 100px;
+}
+.order-popover .loader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.order-popover .error,
+.order-popover .empty {
+  padding: 10px;
+  font-size: 13px;
+  color: #888;
+}
+.order-popover .products-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.order-popover .products-table th,
+.order-popover .products-table td {
+  text-align: left;
+  padding: 8px 6px;
+  vertical-align: middle;
+}
+.order-popover .products-table th {
+  font-weight: 600;
+  font-size: 12px;
+  color: #666;
+  border-bottom: 1px solid #ddd;
+}
+.order-popover .products-table td.quantity,
+.order-popover .products-table td.price {
+  text-align: right;
+  white-space: nowrap;
+}
+.order-popover .products-table .product-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.order-popover .products-table .product-image {
+  width: 36px;
+  height: 36px;
+  -o-object-fit: cover;
+     object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+.order-popover .products-table .title {
+  margin: 0;
+  font-size: 13px;
+  color: #333;
+}
+
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-slide-enter-active,
+  .fade-slide-leave-active {
+    transition: none;
+  }
+}
+.fade-scale-enter-from,
+.fade-scale-leave-to {
+  opacity: 0;
+  transform: scale(0.985);
+}
+
+.fade-scale-enter-active,
+.fade-scale-leave-active {
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-scale-enter-active,
+  .fade-scale-leave-active {
+    transition: none;
+  }
+}
+.fade-through-enter-from {
+  opacity: 0;
+  transform: scale(1.01);
+}
+
+.fade-through-leave-to {
+  opacity: 0;
+  transform: scale(0.99);
+}
+
+.fade-through-enter-active,
+.fade-through-leave-active {
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-through-enter-active,
+  .fade-through-leave-active {
+    transition: none;
+  }
+}
+.slide-left-enter-from,
+.slide-left-leave-to {
+  opacity: 0;
+  transform: translateX(12px);
+}
+
+.slide-left-enter-active,
+.slide-left-leave-active {
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slide-left-enter-active,
+  .slide-left-leave-active {
+    transition: none;
+  }
+}
+.slide-right-enter-from,
+.slide-right-leave-to {
+  opacity: 0;
+  transform: translateX(-12px);
+}
+
+.slide-right-enter-active,
+.slide-right-leave-active {
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slide-right-enter-active,
+  .slide-right-leave-active {
+    transition: none;
+  }
+}
+/* Respect user's reduced-motion prefs */
+@media (prefers-reduced-motion: reduce) {
+  .fade-slide-enter-active,
+  .fade-slide-leave-active {
+    transition: none !important;
+  }
+}
+.orders-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  white-space: nowrap;
+}
+.orders-table-scroll .n-data-table {
+  min-width: 900px;
+}
+
+@media only screen and (max-width: 950px) {
+  #pfm-panel-app {
+    padding: 2rem 0.5rem;
+  }
+  .top-bar .greeting {
+    transform: none;
+    top: -20px;
+    right: auto;
+    left: 0;
+  }
 }/*# sourceMappingURL=main.css.map */

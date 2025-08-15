@@ -8,11 +8,12 @@ import { request } from "@/utils/api";
  * - Tracks removed items (for backend payload)
  * - Handles edit mode, confirmation, and payload shaping
  */
-export function useEdit({ order, orderId, message, emit }) {
+export function useEdit({ order, orderId, message, emit }, sourceType = "order") {
     const editMode = ref(false);
     const isEditing = ref(false);
     const showEditConfirmModal = ref(false);
-
+    console.log("sourceType:", sourceType);
+    const isReplacement = sourceType === "replacement";
     const editItems = ref([]);
     const editFees = ref([]);
     const editShipping = ref([]);
@@ -47,24 +48,34 @@ export function useEdit({ order, orderId, message, emit }) {
 
             if (item.isNew) {
                 if (field === "quantity") {
-                    console.log(
-                        `[onEditItemChange] Before calc: original_price=${item.original_price}, quantity=${item.quantity}`
-                    );
-                    const price = Number(item.original_price) || 0;
-                    const qty = Number(item.quantity) || 0;
-                    item.total = Math.round(qty * price * 100) / 100;
+                    if (isReplacement) {
+                        // Replacements are always free
+                        item.total = 0;
+                        item.tax = 0;
+                        item.unit_price = 0;
+                    } else {
+                        const price = Number(item.original_price) || 0;
+                        const qty = Number(item.quantity) || 0;
+                        item.total = Math.round(qty * price * 100) / 100;
+                    }
                     console.log(`[onEditItemChange] After calc: total=${item.total}`);
                 }
             } else if (field === "quantity") {
-                const orig = (order.value.line_items || []).find((i) => i.id === id);
-                if (orig && orig.quantity > 0) {
-                    const perUnitTotal = orig.total / orig.quantity;
-                    const perUnitTax = orig.total_tax / orig.quantity;
-                    item.total = Math.round(perUnitTotal * value * 100) / 100;
-                    item.tax = Math.round(perUnitTax * value * 100) / 100;
-                } else {
+                if (isReplacement) {
                     item.total = 0;
                     item.tax = 0;
+                    item.unit_price = 0;
+                } else {
+                    const orig = (order.value.line_items || []).find((i) => i.id === id);
+                    if (orig && orig.quantity > 0) {
+                        const perUnitTotal = orig.total / orig.quantity;
+                        const perUnitTax = orig.total_tax / orig.quantity;
+                        item.total = Math.round(perUnitTotal * value * 100) / 100;
+                        item.tax = Math.round(perUnitTax * value * 100) / 100;
+                    } else {
+                        item.total = 0;
+                        item.tax = 0;
+                    }
                 }
                 item.changed = true;
             }
@@ -162,8 +173,16 @@ export function useEdit({ order, orderId, message, emit }) {
             item.sku = prod.sku;
             item.original_price = prod.price;
             item.quantity = 1;
-            item.total = prod.price;
-            item.tax = 0;
+            if (isReplacement) {
+                // 🔒 Force zero totals for replacements
+                item.unit_price = 0;
+                item.total = 0;
+                item.tax = 0;
+            } else {
+                item.unit_price = prod.price;
+                item.total = prod.price;
+                item.tax = 0;
+            }
             item.changed = true;
             console.log(
                 `[onProductSelected] id=${editItemId}, product_id=${productId}, price=${prod.price}, item=`,
@@ -257,10 +276,12 @@ export function useEdit({ order, orderId, message, emit }) {
         editShipping.value = (order.value.shipping_lines || []).map((s) => ({
             id: s.id,
             method_title: s.method_title,
+            method_id: s.method_id && s.instance_id ? `${s.method_id}:${s.instance_id}` : "",
             total: +s.total,
             tax: +s.total_tax,
             changed: false,
         }));
+
         removedItems.value = [];
         editMode.value = true;
         showEditConfirmModal.value = false;
@@ -304,9 +325,9 @@ export function useEdit({ order, orderId, message, emit }) {
             };
 
             console.log("[confirmEdit] Payload:", JSON.stringify(payload, null, 2));
-
+            const endpoint = sourceType === "replacement" ? `/replacements/${orderId}/edit` : `/orders/${orderId}/edit`;
             const res = await request({
-                url: `/orders/${orderId}/edit`,
+                url: endpoint,
                 method: "POST",
                 body: payload,
             });
@@ -364,6 +385,6 @@ export function useEdit({ order, orderId, message, emit }) {
         onAddFee,
         removeFee,
         isFeeRemoved,
-        autoTaxCalc
+        autoTaxCalc,
     };
 }

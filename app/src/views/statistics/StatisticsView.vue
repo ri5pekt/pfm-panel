@@ -1,7 +1,17 @@
+<!-- StatisticsView.vue -->
 <template>
     <div class="view-wrapper stats-wrapper">
         <div class="page-title">Statistics</div>
-        <OrderFiltersPanel v-model="filters" />
+        <OrderFiltersPanel
+            v-model="filters"
+            :showStatus="false"
+            :showTags="false"
+            :showWarehouse="false"
+            :showExportStatus="false"
+            :showAddrStatus="false"
+            :showSearch="false"
+            :showDate="true"
+        />
         <div class="stats-grid">
             <!-- Pass stats object as prop instead of orders -->
             <MainStatsPanel :stats="stats" :loading="loading" />
@@ -36,7 +46,8 @@ function getToday() {
     return `${y}-${m}-${day}`;
 }
 
-const today = "2025-01-01";
+//const today = "2025-01-01";
+const today = getToday(); // 1. Use today as default
 
 const filters = reactive({
     status: null,
@@ -88,11 +99,48 @@ async function fetchOrdersTimeSeries() {
     if (filters.date_to) params.append("date_to", filters.date_to);
 
     try {
-        const data = await request({
-            url: `/stats/orders/timeseries?${params}`,
-        });
+        const data = await request({ url: `/stats/orders/timeseries?${params}` });
         ordersTimeSeries.value = data.orders_time_series ?? [];
-        console.log("Orders Time Series:", ordersTimeSeries.value);
+
+        // 🔎 Debug: log what the backend thinks the window is
+        console.log("[TS] bounds.local:", data?.bounds?.local);
+        console.log("[TS] bounds.utc:", data?.bounds?.utc);
+
+        // 🔎 Debug: log “now” and current local hour
+        const now = new Date();
+        console.log("[TS] now local:", now.toString(), "hour=", now.getHours());
+
+        // 🔎 Debug: find last non-zero bucket today
+        const series = ordersTimeSeries.value;
+        const lastIdx = [...series].reverse().findIndex((p) => Number(p.count) > 0);
+        const realLastIdx = lastIdx === -1 ? -1 : series.length - 1 - lastIdx;
+
+        if (realLastIdx >= 0) {
+            const last = series[realLastIdx]; // { label: "HH:00" | "YYYY-MM-DD" | "Week of ...", count }
+            console.log("[TS] last non-zero bucket:", realLastIdx, last);
+
+            // Only do precise hour math when we’re in hourly mode (24 labels like "00:00".."23:00")
+            const hourlyLike = series.length === 24 && /^\d{2}:\d{2}$/.test(series[0]?.label || "");
+            if (hourlyLike && filters.date_from === filters.date_to) {
+                const [hh] = String(last.label)
+                    .split(":")
+                    .map((n) => parseInt(n, 10));
+                const lastDate = new Date(`${filters.date_from}T00:00:00`); // local midnight
+                lastDate.setHours(hh, 0, 0, 0);
+
+                const gapHours = Math.floor((now - lastDate) / 36e5);
+                console.log(
+                    "[TS] last order hour:",
+                    hh,
+                    "last order time:",
+                    lastDate.toString(),
+                    "gapHours≈",
+                    gapHours
+                );
+            }
+        } else {
+            console.log("[TS] No non-zero buckets for this range.");
+        }
     } catch (err) {
         // handle error
     } finally {

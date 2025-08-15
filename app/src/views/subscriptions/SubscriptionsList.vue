@@ -177,14 +177,35 @@ const columns = [
     },
 ];
 
-function handleRowClick(row) {
-    router.push(`/subscriptions/${row.id}`);
+function openSubscription(row, e) {
+    const loc = { name: "subscription-view", params: { id: row.id } };
+    const href = router.resolve(loc).href; // e.g. "#/subscriptions/123" (hash history)
+
+    if (e?.metaKey || e?.ctrlKey || e?.button === 1) {
+        // Cmd/Ctrl or middle click → new tab
+        window.open(href, "_blank", "noopener");
+    } else {
+        // Plain left click → SPA
+        router.push(loc);
+    }
 }
 
 function rowProps(row) {
     return {
         style: { cursor: "pointer" },
-        onClick: () => handleRowClick(row),
+        onClick: (e) => openSubscription(row, e),
+        onMousedown: (e) => {
+            // Middle mouse = 1
+            if (e.button === 1) {
+                e.preventDefault();
+                openSubscription(row, e);
+            }
+        },
+        onContextmenu: (e) => {
+            // Right click → new tab
+            e.preventDefault(); // remove if you want browser context menu
+            openSubscription(row, { ...e, metaKey: true });
+        },
     };
 }
 

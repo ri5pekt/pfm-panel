@@ -16,21 +16,34 @@ export function getSpecialTags(row) {
     const hasParent = !!getMetaValue(row, "_subscription_parent");
     const upsellAmount = parseFloat(getMetaValue(row, "_upsell_amount")) || 0;
 
-    function makeTag(label, bgColor, textColor = "#fff") {
+    function makeTag(label, bgColor, options = {}) {
+        const {
+            textColor = "#fff",
+            size = "small",
+            fontSize = "10px",
+            border = "none",
+            padding = "0px 6px",
+            borderRadius = "10px",
+            lineHeight = "1",
+            fontWeight = "bold",
+        } = options;
+
         return h(
             NTag,
             {
-                size: "small",
+                size,
                 style: {
                     "--n-border": "none",
                     backgroundColor: bgColor,
                     color: textColor,
-                    borderRadius: "10px",
-                    fontSize: "11px",
-                    padding: "0px 6px",
-                    lineHeight: "1",
-                    border: "none",
+                    border,
+                    fontSize,
+                    padding,
+                    borderRadius,
+                    lineHeight,
                     boxShadow: "none",
+                    fontWeight,
+                    whiteSpace: "nowrap"
                 },
             },
             { default: () => label }
@@ -44,6 +57,27 @@ export function getSpecialTags(row) {
     if (hasRenewal) tags.push(makeTag("Sub Renewal", "#a259ff"));
     if (hasParent) tags.push(makeTag("Sub Parent", "#7e22ce"));
     if (upsellAmount > 0) tags.push(makeTag("BAS Added", "#00b894"));
+    if (row.refunded_amount && parseFloat(row.refunded_amount) > 0) {
+        tags.push(makeTag("Refunded", "#d47e78"));
+    }
+
+
+    const couponMap = row.coupon_codes;
+    if (couponMap && typeof couponMap === "object") {
+        Object.values(couponMap).forEach((code) => {
+            tags.push(
+                makeTag(code, "#f1f1f1", {
+                    textColor: "#555",
+                    size: "tiny",
+                    fontSize: "10px",
+                    border: "1px solid #ddd",
+                    padding: "0px 4px",
+                    borderRadius: "3px",
+                    fontWeight: "normal",
+                })
+            );
+        });
+    }
 
     return tags;
 }

@@ -389,11 +389,25 @@
                             <!-- Method -->
                             <td>
                                 <template v-if="editMode">
-                                    <n-input
-                                        :value="getEditShipping(ship.id).method_title"
-                                        @update:value="(val) => onEditShippingChange(ship.id, 'method_title', val)"
+                                    <n-select
+                                        v-model:value="getEditShipping(ship.id).method_id"
+                                        :options="
+                                            shippingMethodOptions.map((opt) => ({
+                                                label: `${opt.label} - $${opt.cost}`,
+                                                value: opt.id,
+                                            }))
+                                        "
+                                        placeholder="Select method"
+                                        @update:value="
+                                            (val) => {
+                                                const selected = shippingMethodOptions.find((opt) => opt.id === val);
+                                                onEditShippingChange(ship.id, 'method_title', selected?.label || val);
+                                                onEditShippingChange(ship.id, 'method_id', val);
+                                                onEditShippingChange(ship.id, 'total', selected?.cost || 0);
+                                            }
+                                        "
                                         size="small"
-                                        style="max-width: 160px"
+                                        style="max-width: 200px"
                                     />
                                 </template>
                                 <template v-else>
@@ -425,7 +439,10 @@
                                 <div v-else>
                                     {{ formatCurrency(+ship.total) }}
                                 </div>
-                                <div v-if="+ship.total_refunded !== 0" class="refunded-amount">
+                                <div
+                                    v-if="ship.total_refunded != null && +ship.total_refunded !== 0"
+                                    class="refunded-amount"
+                                >
                                     ↩ -{{ formatCurrency(Math.abs(ship.total_refunded)) }}
                                 </div>
                             </td>
@@ -444,7 +461,7 @@
                                 </div>
                                 <div v-else-if="editMode">
                                     <n-input-number
-                                        :value="getEditShipping(ship.id).tax"
+                                        :value="+getEditShipping(ship.id).tax || 0"
                                         @update:value="(val) => onEditShippingChange(ship.id, 'tax', val)"
                                         :min="0"
                                         size="small"
@@ -452,9 +469,12 @@
                                     />
                                 </div>
                                 <div v-else>
-                                    {{ formatCurrency(+ship.total_tax) }}
+                                    {{ formatCurrency(+ship.total_tax || 0) }}
                                 </div>
-                                <div v-if="+ship.refunded_tax !== 0" class="refunded-amount">
+                                <div
+                                    v-if="ship.refunded_tax != null && +ship.refunded_tax !== 0"
+                                    class="refunded-amount"
+                                >
                                     ↩ -{{ formatCurrency(Math.abs(ship.refunded_tax)) }}
                                 </div>
                             </td>
@@ -493,6 +513,14 @@
             <div class="totals-section final-totals">
                 <div v-if="totalRefunded > 0" class="refunded-row">
                     <p><strong>Refunded:</strong> ↩ -{{ formatCurrency(totalRefunded) }}</p>
+
+                    <ul class="refunds-list" style="margin-top: 0.5rem; list-style: disc; padding-left: 1.5rem">
+                        <li v-for="refund in order.refunds" :key="refund.id">
+                            {{ formatCurrency(refund.total) }} —
+                            {{ formatOrderDate(refund.date) }}
+                            <span v-if="refund.reason">— {{ refund.reason }}</span>
+                        </li>
+                    </ul>
                 </div>
                 <p><strong>Order Total:</strong> {{ formatCurrency(order.total) }}</p>
                 <p><strong>Paid:</strong> {{ formatCurrency(order.total) }}</p>
@@ -501,14 +529,58 @@
             <hr />
 
             <n-space size="small" style="margin-top: 1rem" v-if="!refundMode && !editMode">
-                <n-button v-if="$can('refund_orders')" size="medium" type="default" @click="enterRefundMode">Refund</n-button>
-                <n-button v-if="$can('edit_orders_items')" size="medium" type="default" @click="enterEditMode">Edit</n-button>
+                <n-button
+                    v-if="$can('refund_orders') && props.sourceType === 'order'"
+                    size="medium"
+                    type="default"
+                    @click="enterRefundMode"
+                    >Refund</n-button
+                >
+                <n-button
+                    v-if="
+                        (props.sourceType !== 'replacement' && $can('edit_orders_items')) ||
+                        (props.sourceType === 'replacement' && $can('edit_replacement_orders'))
+                    "
+                    size="medium"
+                    type="default"
+                    @click="enterEditMode"
+                >
+                    Edit
+                </n-button>
             </n-space>
 
             <n-space vertical size="medium" style="margin-top: 1rem" v-if="refundMode && $can('refund_orders')">
+                <div style="display: flex; gap: 12px; align-items: center">
+                    <div style="display: flex; gap: 12px; align-items: center">
+                        <div><strong>Refund %</strong></div>
+                        <n-input-number
+                            v-model:value="refundPercent"
+                            :min="1"
+                            :max="100"
+                            size="small"
+                            style="width: 100px"
+                            placeholder="Refund %"
+                            @update:value="onRefundPercentInput"
+                        />
+                    </div>
+                </div>
                 <div><strong>Total available to refund:</strong> {{ formatCurrency(totalAvailableToRefund) }}</div>
                 <div><strong>Refund amount:</strong> {{ formatCurrency(refundTotalAmount) }}</div>
-                <n-checkbox v-model:checked="refundViaBraintree"> Refund via Braintree </n-checkbox>
+
+                <n-checkbox v-if="order.payment_method?.includes('braintree')" v-model:checked="refundViaBraintree">
+                    Refund via Braintree
+                </n-checkbox>
+
+                <!-- 📝 Refund Reason -->
+                <div>
+                    <n-input
+                        v-model:value="refundReason"
+                        type="textarea"
+                        placeholder="Enter reason for refund (optional)"
+                        :autosize="{ minRows: 2, maxRows: 4 }"
+                    />
+                </div>
+
                 <n-space style="margin-top: 1rem">
                     <n-button
                         type="primary"
@@ -522,12 +594,25 @@
                 </n-space>
             </n-space>
 
-            <n-space vertical size="medium" style="margin-top: 1rem" v-if="editMode && $can('edit_orders_items')">
-                <n-checkbox v-model:checked="autoTaxCalc" style="margin-bottom: 1em">
+            <n-space
+                vertical
+                size="medium"
+                style="margin-top: 1rem"
+                v-if="
+                    editMode &&
+                    ((props.sourceType !== 'replacement' && $can('edit_orders_items')) ||
+                        (props.sourceType === 'replacement' && $can('edit_replacement_orders')))
+                "
+            >
+                <n-checkbox
+                    v-if="props.sourceType === 'order'"
+                    v-model:checked="autoTaxCalc"
+                    style="margin-bottom: 1em"
+                >
                     Calculate Taxes Automatically
                 </n-checkbox>
                 <n-space>
-                    <n-button type="primary" :disabled="false" @click="proceedEdit"> Proceed Edit </n-button>
+                    <n-button type="primary" :disabled="false" @click="proceedEdit">Proceed Edit</n-button>
                     <n-button ghost @click="cancelEdit">Cancel</n-button>
                 </n-space>
             </n-space>
@@ -542,7 +627,7 @@ import { formatCurrency, setCurrency } from "@/utils/utils";
 import { useRefund } from "@/composables/useRefund";
 import { useEdit } from "@/composables/useEdit";
 import { CloseCircleOutlined } from "@vicons/antd";
-
+import { formatOrderDate } from "@/utils/utils";
 const props = defineProps({
     order: {
         type: Object,
@@ -550,11 +635,22 @@ const props = defineProps({
     },
     orderId: { type: [String, Number], required: true },
     loading: Boolean,
+    sourceType: {
+        type: String,
+        default: "order",
+    },
 });
 const emit = defineEmits(["updateOrder"]);
 const message = useMessage();
 
 const order = computed(() => props.order || {});
+
+const shippingMethodOptions = [
+    { id: "free_shipping:3", label: "Free Shipping", cost: 0 },
+    { id: "flat_rate:1", label: "Expedited Shipping", cost: 15 },
+    { id: "flat_rate:10", label: "Overnight Shipping", cost: 25 },
+    { id: "flat_rate:4", label: "Outside of US Shipping", cost: 9 },
+];
 
 const {
     refundMode,
@@ -567,6 +663,7 @@ const {
     pendingRefundFees,
     pendingRefundShipping,
     refundViaBraintree,
+    refundReason,
 
     getRefundItem,
     getRefundFee,
@@ -589,6 +686,9 @@ const {
     hasRefund,
     totalAvailableToRefund,
     totalTaxAmount,
+
+    refundPercent,
+    onRefundPercentInput,
 } = useRefund({
     order,
     orderId: props.orderId,
@@ -636,6 +736,6 @@ const {
     onAddFee, // function: add new fee row
     removeFee, // function: remove fee row
     isFeeRemoved, // function: check if fee is removed in edit mode
-    autoTaxCalc
-} = useEdit({ order, orderId: props.orderId, message, emit });
+    autoTaxCalc,
+} = useEdit({ order, orderId: props.orderId, message, emit }, props.sourceType);
 </script>

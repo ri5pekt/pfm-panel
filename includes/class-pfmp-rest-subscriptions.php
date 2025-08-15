@@ -253,6 +253,7 @@ class PFMP_REST_Subscriptions {
         if ($updated) {
             $sub->add_order_note("Subscription items were edited by $admin_name.");
             if ($auto_tax) {
+                /*
                 if (class_exists('WC_Complyt_Tax') && method_exists('WC_Complyt_Tax', 'init') && method_exists('WC_Complyt_Tax', 'get_instance')) {
                     WC_Complyt_Tax::init();
                     $complyt = WC_Complyt_Tax::get_instance();
@@ -272,6 +273,9 @@ class PFMP_REST_Subscriptions {
                 $sub->calculate_taxes($billing);
                 $sub->calculate_totals(false);
                 $sub->save();
+                */
+                if (class_exists('WC_Complyt_Tax') && method_exists('WC_Complyt_Tax', 'init')) WC_Complyt_Tax::init();
+                apply_filters('get_rate_for_order_or_subscription', null, $sub->get_id());
             } else {
                 // --- BEGIN: Remove orphaned tax lines and recalc tax totals ---
                 $item_tax_totals = [];

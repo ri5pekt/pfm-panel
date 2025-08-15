@@ -38,21 +38,38 @@ class PFMP_Utils {
     public static function can_access_pfm_panel() {
         $remote_ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
         $whitelisted_ips = [
-            '77.124.27.149',
+            '199.203.127.85',
             '77.127.100.144'
         ];
 
+        $result = false;
+        $reason = '';
+
         if (in_array($remote_ip, $whitelisted_ips)) {
-            return true;
-        }
-
-        if (is_user_logged_in()) {
-            $user = wp_get_current_user();
-            if (current_user_can('manage_woocommerce')) {
-                return true;
+            $result = true;
+            //$reason = 'Whitelisted IP';
+        } elseif (is_user_logged_in()) {
+            //$user = wp_get_current_user();
+            if (current_user_can('manage_woocommerce') || current_user_can('access_pfm_panel')) {
+                $result = true;
+                //$reason = 'User has manage_woocommerce capability';
+            } else {
+                //$reason = 'User logged in but lacks capability';
             }
+        } else {
+            //$reason = 'Not logged in and IP not whitelisted';
         }
 
-        return false;
+        // Log attempt
+        /*
+        self::log([
+            'ip'      => $remote_ip,
+            'time'    => current_time('Y-m-d H:i:s'),
+            'result'  => $result ? 'ACCESS GRANTED' : 'ACCESS DENIED',
+            'reason'  => $reason,
+            'user_id' => is_user_logged_in() ? get_current_user_id() : null,
+        ]);
+        */
+        return $result;
     }
 }

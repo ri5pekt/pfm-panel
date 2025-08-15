@@ -18,40 +18,31 @@
 </template>
 
 <script setup>
-import { ref, watch } from "vue";
+import { ref, watch, computed } from "vue";
 import { request } from "@/utils/api";
 
-// ✅ Props
 const props = defineProps({
     orderId: String,
     refreshKey: [String, Number],
+    sourceType: { type: String, default: "order" },
 });
 
-// ✅ State
 const orderNotes = ref([]);
 const loadingNotes = ref(true);
 
-// ✅ Fetch function
+const endpoint = computed(() =>
+    props.sourceType === "replacement" ? `/replacements/${props.orderId}/notes` : `/orders/${props.orderId}/notes`
+);
+
 async function fetchNotes() {
-    console.log("Fetching order notes for ID:", props.orderId);
     if (!props.orderId) return;
     loadingNotes.value = true;
-
     try {
-        orderNotes.value = await request({
-            url: `/orders/${props.orderId}/notes`,
-            useCustomApi: true, // Now this uses your custom endpoint!
-        });
-    } catch (err) {
-        console.error("❌ Failed to load order notes:", err);
+        orderNotes.value = await request({ url: endpoint.value, useCustomApi: true });
     } finally {
-        console.log("✅ Order notes loaded:", orderNotes.value.length);
         loadingNotes.value = false;
     }
 }
 
-// ✅ Watch orderId for changes and fetch on load
-watch([() => props.orderId, () => props.refreshKey], fetchNotes, {
-    immediate: true,
-});
+watch([() => props.orderId, () => props.refreshKey], fetchNotes, { immediate: true });
 </script>

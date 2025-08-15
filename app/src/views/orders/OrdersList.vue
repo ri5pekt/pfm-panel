@@ -1,56 +1,91 @@
-
 <!-- OrdersList.vue -->
 <template>
     <div class="view-wrapper orders-list">
         <div class="page-title">All Orders</div>
 
-        <!-- 🔁 Now connected properly with v-model -->
         <OrderFiltersPanel v-model="filters" @search="handleSearch" />
 
-        <BulkEditPanel
-            v-if="$can('edit_orders_info')"
-            :selected-orders="selectedOrders"
-            :on-complete="
-                () => {
-                    fetchOrders(page);
-                    selectedOrders = [];
-                }
-            "
-            @toggle-checkboxes="toggleCheckboxes"
-        />
+        <n-space align="center" justify="flex-start" wrap style="margin-bottom: 8px">
+            <BulkEditPanel
+                v-if="$can('edit_orders_info')"
+                :selected-orders="selectedOrders"
+                :on-complete="onBulkComplete"
+                @toggle-checkboxes="toggleCheckboxes"
+            />
+            <JumpToOrderPanel />
+        </n-space>
 
         <n-space vertical size="large">
             <n-spin :show="loading">
-                <n-data-table
-                    :row-props="rowProps"
-                    :columns="columns"
-                    :data="orders"
-                    :pagination="false"
-                    :bordered="true"
-                    @row-click="handleRowClick"
-                />
+                <div class="orders-table-scroll">
+                    <n-data-table
+                        :row-key="(row) => row.id"
+                        :row-props="rowProps"
+                        :columns="columns"
+                        :data="orders"
+                        :pagination="false"
+                        :bordered="true"
+                    />
+                </div>
             </n-spin>
 
-            <n-pagination v-model:page="page" :page-count="totalPages" :page-size="perPage" style="margin-top: 1rem" />
+            <n-pagination
+                v-model:page="page"
+                v-model:page-size="perPage"
+                :page-count="totalPages"
+                :page-sizes="ALLOWED_PAGE_SIZES"
+                :show-size-picker="true"
+                style="margin-top: 1rem"
+                :size="isMobile ? 'small' : 'medium'"
+                :page-slot="isMobile ? 5 : 7"
+            >
+            </n-pagination>
         </n-space>
     </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch, h, reactive, computed } from "vue";
-import { NTag, useMessage, NCheckbox } from "naive-ui";
+import { ref, onMounted, onBeforeUnmount, watch, h, reactive, computed } from "vue";
+import { NTag, useMessage, NCheckbox, c } from "naive-ui";
 import { useRouter, useRoute } from "vue-router";
 import { request } from "@/utils/api";
 
+import { formatCurrency } from "@/utils/utils";
 import { formatOrderDate } from "@/utils/utils";
 import { getSpecialTags } from "@/utils/orderTags";
 import OrderFiltersPanel from "@/components/ui-elements/OrderFiltersPanel.vue";
 import BulkEditPanel from "@/components/ui-elements/BulkEditPanel.vue";
+import OrderPreviewPopover from "@/components/ui-elements/OrderPreviewPopover.vue";
+import JumpToOrderPanel from "@/components/ui-elements/JumpToOrderPanel.vue";
+
+import { useIsMobile } from "@/composables/useIsMobile";
+
+const { isMobile } = useIsMobile();
 
 const orders = ref([]);
 
 const totalPages = ref(1);
-const perPage = 10;
+
+const PER_PAGE_LS_KEY = "pfm.orders.perPage";
+const ALLOWED_PAGE_SIZES = [10, 20, 50, 100];
+function coercePerPage(v) {
+    const n = Number(v);
+    return ALLOWED_PAGE_SIZES.includes(n) ? n : 10;
+}
+const perPage = ref(coercePerPage(localStorage.getItem(PER_PAGE_LS_KEY)));
+
+watch(perPage, (val) => {
+    // persist & refetch from page 1
+    localStorage.setItem(PER_PAGE_LS_KEY, String(val));
+    if (!ALLOWED_PAGE_SIZES.includes(val)) return;
+    if (page.value !== 1) {
+        router.replace({ path: "/orders", query: buildQuery(1) });
+        page.value = 1;
+    } else {
+        fetchOrders(1);
+    }
+});
+
 const loading = ref(false);
 
 const router = useRouter();
@@ -58,6 +93,10 @@ const route = useRoute();
 const message = useMessage();
 
 const page = ref(1);
+
+const latestOrderId = ref(null);
+
+const refreshKey = ref(0);
 
 if (route.query.page) {
     page.value = parseInt(route.query.page);
@@ -87,28 +126,26 @@ watch(
         page: page.value,
     }),
     () => {
-        router.replace({
-            path: "/orders",
-            query: {
-                ...Object.fromEntries(
-                    Object.entries(filters).filter(
-                        ([k, v]) => !["search_type", "search_value"].includes(k) && v !== null && v !== ""
-                    )
-                ),
-                page: page.value,
-                // Only add search params if a search is in effect:
-                ...(filters.search_type && filters.search_value
-                    ? {
-                          search_type: filters.search_type,
-                          search_value: filters.search_value,
-                      }
-                    : {}),
-            },
-        });
+        router.replace({ path: "/orders", query: buildQuery(page.value) });
         fetchOrders(page.value);
     },
     { deep: true }
 );
+
+function buildQuery(targetPage = page.value) {
+    const base = Object.fromEntries(
+        Object.entries(filters).filter(
+            ([k, v]) => !["search_type", "search_value"].includes(k) && v !== null && v !== ""
+        )
+    );
+    return {
+        ...base,
+        page: targetPage,
+        ...(filters.search_type && filters.search_value
+            ? { search_type: filters.search_type, search_value: filters.search_value }
+            : {}),
+    };
+}
 
 function getMeta(row, key) {
     const entry = (row.meta_data || []).find((m) => m.key === key);
@@ -119,6 +156,11 @@ const showCheckboxes = ref(false);
 const selectedAction = ref(null);
 function toggleCheckboxes(val) {
     showCheckboxes.value = val;
+}
+
+function onBulkComplete() {
+    fetchOrders(page.value);
+    selectedOrders.value = [];
 }
 
 const columns = computed(() => {
@@ -132,10 +174,17 @@ const columns = computed(() => {
                 const last = row.billing?.last_name || "";
                 const name = (first + " " + last).trim() || "Guest";
 
-                return h("div", { style: { display: "flex", gap: "6px", alignItems: "center" } }, [
-                    h(NTag, { size: "small" }, { default: () => `#${row.id}` }),
-                    h("span", null, name),
-                ]);
+                return h(
+                    OrderPreviewPopover,
+                    { orderId: row.id, refreshKey: refreshKey.value },
+                    {
+                        default: () =>
+                            h("div", { style: { display: "flex", gap: "6px", alignItems: "center" } }, [
+                                h(NTag, { size: "small" }, { default: () => `#${row.id}` }),
+                                h("span", null, name),
+                            ]),
+                    }
+                );
             },
         },
         {
@@ -149,6 +198,7 @@ const columns = computed(() => {
                             display: "flex",
                             flexWrap: "wrap",
                             gap: "6px",
+                            alignItems: "center",
                         },
                     },
                     getSpecialTags(row)
@@ -160,7 +210,8 @@ const columns = computed(() => {
             title: "Date",
             key: "date_created",
             render(row) {
-                return formatOrderDate(row?.date_created?.date);
+                const dt = row?.date_created?.date || row?.date_created;
+                return formatOrderDate(dt);
             },
         },
         {
@@ -175,7 +226,7 @@ const columns = computed(() => {
             title: "Total",
             key: "total",
             render(row) {
-                return `$${row.total}`;
+                return formatCurrency(row.total, row.currency);
             },
         },
         // WAREHOUSE  🔵
@@ -308,24 +359,42 @@ const columns = computed(() => {
 function rowProps(row) {
     return {
         style: { cursor: "pointer" },
-        onClick: () => {
+        onClick: (e) => {
             if (showCheckboxes.value) {
                 const id = row.id;
                 const idx = selectedOrders.value.indexOf(id);
-                if (idx === -1) {
-                    selectedOrders.value.push(id);
-                } else {
-                    selectedOrders.value.splice(idx, 1);
-                }
+                if (idx === -1) selectedOrders.value.push(id);
+                else selectedOrders.value.splice(idx, 1);
             } else {
-                handleRowClick(row);
+                openOrder(row, e);
+            }
+        },
+        onMousedown: (e) => {
+            // Middle button down
+            if (!showCheckboxes.value && e.button === 1) {
+                e.preventDefault(); // stop browser trying to drag-scroll
+                openOrder(row, e);
+            }
+        },
+        onContextmenu: (e) => {
+            e.preventDefault(); // prevent browser menu
+            if (!showCheckboxes.value) {
+                openOrder(row, { ...e, metaKey: true }); 
             }
         },
     };
 }
 
-function handleRowClick(row) {
-    router.push(`/orders/${row.id}`);
+function openOrder(row, e) {
+    // Use a named route or a plain path LOCATION (not href)
+    const loc = { name: "order-view", params: { id: row.id } };
+    const href = router.resolve(loc).href; // for window.open / <a> (e.g. "#/orders/123")
+
+    if (e?.metaKey || e?.ctrlKey || e?.button === 1) {
+        window.open(href, "_blank", "noopener");
+    } else {
+        router.push(loc); // ✅ push the location, not the href string
+    }
 }
 
 async function fetchOrders(currentPage = 1) {
@@ -333,7 +402,7 @@ async function fetchOrders(currentPage = 1) {
     loading.value = true;
 
     const params = new URLSearchParams();
-    params.append("per_page", perPage);
+    params.append("per_page", perPage.value);
     params.append("page", currentPage);
 
     // Add all filters, including search_type and search_value, if present
@@ -350,16 +419,36 @@ async function fetchOrders(currentPage = 1) {
             url: `/orders?${params}`,
             raw: true, // 👈 this is key to access headers
         });
-        console.log(res);
+
         const data = await res.json();
         orders.value = data;
         totalPages.value = parseInt(res.headers.get("X-WP-TotalPages") || "1");
+        refreshKey.value++;
+        console.log(data);
+
+        if (data.length > 0 && page.value === 1 && isFilterEmpty()) {
+            latestOrderId.value = data[0].id;
+        }
     } catch (err) {
         console.error(err);
         message.error("Failed to load orders");
     } finally {
         loading.value = false;
     }
+}
+
+function isFilterEmpty() {
+    return (
+        !filters.status &&
+        !filters.warehouse &&
+        !filters.export_status &&
+        !filters.addr_status &&
+        !filters.tag &&
+        !filters.date_from &&
+        !filters.date_to &&
+        !filters.search_type &&
+        !filters.search_value
+    );
 }
 
 const selectedOrders = ref([]);
@@ -375,42 +464,71 @@ function handleSearch() {
     if (filters.search_type === null) {
         filters.search_value = null;
     }
+    let filtersMutated = false;
     if (filters.search_type === "order_id" && filters.search_value) {
         // Clear all other filters except search fields
         Object.keys(filters).forEach((k) => {
             if (!["search_type", "search_value"].includes(k)) {
-                filters[k] = null;
+                if (filters[k] !== null) {
+                    filters[k] = null;
+                    filtersMutated = true;
+                }
             }
         });
     }
-    page.value = 1;
 
-    // Build query for URL: add all non-empty filters except search_type/search_value unless they are set
-    const queryObj = {
-        ...Object.fromEntries(
-            Object.entries(filters).filter(
-                ([k, v]) => !["search_type", "search_value"].includes(k) && v !== null && v !== ""
-            )
-        ),
-        page: page.value,
-        ...(filters.search_type && filters.search_value
-            ? {
-                  search_type: filters.search_type,
-                  search_value: filters.search_value,
-              }
-            : {}),
-    };
+    const switchingToPage1 = page.value !== 1;
+    router.replace({ path: "/orders", query: buildQuery(1) });
+    if (switchingToPage1) {
+        // Let the watcher (on page) do the single fetch
+        page.value = 1;
+    } else if (!filtersMutated) {
+        // Only search fields changed → watcher won’t fire
+        fetchOrders(1);
+    }
+}
 
-    router.replace({
-        path: "/orders",
-        query: queryObj,
-    });
+const pollId = ref(null);
 
-    fetchOrders(page.value);
+function startPolling() {
+    if (pollId.value) return;
+    pollId.value = setInterval(checkLatest, 30000);
+}
+function stopPolling() {
+    if (!pollId.value) return;
+    clearInterval(pollId.value);
+    pollId.value = null;
+}
+
+async function checkLatest() {
+    if (page.value !== 1 || loading.value || !isFilterEmpty()) return;
+    try {
+        const res = await request({ url: "/orders/latest-id" });
+        const { latest_id } = await res;
+        if (latest_id !== latestOrderId.value) fetchOrders(1);
+        else refreshOrderTimestamps();
+    } catch (err) {
+        console.warn("⚠️ Error checking latest order ID", err);
+    }
 }
 
 onMounted(() => {
-    console.log("🚀 Initial page load, fetching orders...");
     fetchOrders(page.value);
+    startPolling();
 });
+
+onBeforeUnmount(() => stopPolling());
+
+// stop polling whenever filters/page make it irrelevant
+watch([page, () => JSON.stringify(filters)], () => {
+    if (page.value !== 1 || !isFilterEmpty()) stopPolling();
+    else startPolling();
+});
+
+function refreshOrderTimestamps() {
+    orders.value = orders.value.map((order) => {
+        // Trick Vue into re-rendering rows by shallow-cloning
+        return { ...order };
+    });
+}
 </script>

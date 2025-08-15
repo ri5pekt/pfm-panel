@@ -1,86 +1,111 @@
+<!-- WarehouseExportPanel.vue -->
 <template>
     <div class="panel warehouse-export-panel">
         <h3>Warehouse Export</h3>
         <n-skeleton v-if="loading" text :repeat="5" />
         <div v-else>
-            <p>
-                <strong>Warehouse:</strong>
-                <span
-                    class="warehouse-export-tag"
-                    :class="[
-                        `warehouse-${getMeta('warehouse_to_export') || 'none'}`,
-                        getMeta('warehouse_export_status')
-                            ? `warehouse-export-${getMeta('warehouse_export_status')}`
-                            : 'warehouse-export-none',
-                    ]"
+            <div class="address-columns">
+                <div class="address-section">
+                    <p>
+                        <strong>Warehouse:</strong>
+                        <span
+                            class="warehouse-export-tag"
+                            :class="[
+                                `warehouse-${getMeta('warehouse_to_export') || 'none'}`,
+                                getMeta('warehouse_export_status')
+                                    ? `warehouse-export-${getMeta('warehouse_export_status')}`
+                                    : 'warehouse-export-none',
+                            ]"
+                        >
+                            {{ getMeta("warehouse_to_export") || "—" }}
+                        </span>
+                    </p>
+
+                    <p>
+                        <strong>Export Status:</strong>
+                        <span
+                            class="warehouse-export-status-tag"
+                            :class="`warehouse-export-status-${getMeta('warehouse_export_status') || 'none'}`"
+                        >
+                            {{ exportStatusLabel }}
+                        </span>
+                    </p>
+
+                    <p>
+                        <strong>Address Validated:</strong>
+                        <span
+                            :class="[
+                                'address-status-pill',
+                                'address-validation-status-' + (getMeta('validate_address_status') || 'not-validated'),
+                            ]"
+                        >
+                            {{ getMeta("validate_address_status") || "—" }}
+                        </span>
+                    </p>
+                    <p v-if="trackingNumber">
+                        <strong>Tracking Number: </strong>
+                        <a :href="`https://particle.aftership.com/${trackingNumber}`" target="_blank">
+                            {{ trackingNumber }}
+                        </a>
+                    </p>
+
+                    <div v-if="$can('send_to_warehouse')" class="address-actions">
+                        <n-space horisontal size="small">
+                            <n-button
+                                size="medium"
+                                type="default"
+                                :loading="validating"
+                                :disabled="getMeta('validate_address_status') === 'valid'"
+                                @click="revalidateAddress"
+                            >
+                                Revalidate Address
+                            </n-button>
+
+                            <n-button
+                                :loading="forceValidating"
+                                :disabled="getMeta('validate_address_status') === 'valid'"
+                                @click="forceValidateAddress"
+                                size="medium"
+                                type="default"
+                            >
+                                Force Validate Address
+                            </n-button>
+                        </n-space>
+                        <div v-if="$can('edit_orders_info')" class="warehouse-actions" style="margin-top: 1.5rem">
+                            <n-space horisontal size="small">
+                                <n-button
+                                    size="medium"
+                                    type="default"
+                                    :loading="exporting"
+                                    :disabled="!selectedWarehouse"
+                                    @click="exportToWarehouse"
+                                >
+                                    Export to Warehouse
+                                </n-button>
+                                <n-select
+                                    v-model:value="selectedWarehouse"
+                                    :options="warehouseOptions"
+                                    placeholder="Select warehouse"
+                                    style="width: 200px"
+                                />
+                            </n-space>
+                        </div>
+                    </div>
+                </div>
+                <div
+                    class="address-section"
+                    v-if="props.getMeta('warehouse_to_export') === 'shipbob' && props.getMeta('warehouse_shipment_id')"
                 >
-                    {{ getMeta("warehouse_to_export") || "—" }}
-                </span>
-            </p>
-
-            <p>
-                <strong>Export Status:</strong>
-                <span
-                    class="warehouse-export-status-tag"
-                    :class="`warehouse-export-status-${getMeta('warehouse_export_status') || 'none'}`"
-                >
-                    {{ exportStatusLabel }}
-                </span>
-            </p>
-
-            <p>
-                <strong>Address Validated:</strong>
-                <span
-                    :class="[
-                        'address-status-pill',
-                        'address-validation-status-' + (getMeta('validate_address_status') || 'not-validated'),
-                    ]"
-                >
-                    {{ getMeta("validate_address_status") || "—" }}
-                </span>
-            </p>
-            <p v-if="trackingNumber"><strong>Tracking Number:</strong> {{ trackingNumber }}</p>
-
-            <div v-if="$can('edit_orders_info')" class="address-actions">
-                <n-space horisontal size="small">
-                    <n-button
-                        size="medium"
-                        type="default"
-                        :loading="validating"
-                        :disabled="getMeta('validate_address_status') === 'valid'"
-                        @click="revalidateAddress"
-                    >
-                        Revalidate Address
-                    </n-button>
-
-                    <n-button
-                        :loading="forceValidating"
-                        :disabled="getMeta('validate_address_status') === 'valid'"
-                        @click="forceValidateAddress"
-                        size="medium" type="default"
-                    >
-                        Force Validate Address
-                    </n-button>
-                </n-space>
-            </div>
-
-            <div v-if="$can('edit_orders_info')" class="warehouse-actions" style="margin-top: 1.5rem">
-                <n-space horisontal size="small">
-                    <n-button
-                        size="medium" type="default"
-                        :loading="exporting"
-                        :disabled="!selectedWarehouse"
-                        @click="exportToWarehouse"
-                    >
-                        Export to Warehouse
-                    </n-button>
-                    <n-select
-                        v-model:value="selectedWarehouse"
-                        :options="warehouseOptions"
-                        placeholder="Select warehouse"
-                        style="width: 200px"
-                    />
-                </n-space>
+                    <h4>Detailed Timeline</h4>
+                    <n-skeleton v-if="loadingTimeline" text :repeat="4" />
+                    <ul v-else class="timeline-list">
+                        <li v-for="event in timelineEvents" :key="event.timestamp" class="timeline-entry">
+                            <small>{{ new Date(event.timestamp).toLocaleString() }}</small>
+                            <strong>{{ event.log_type_text }}</strong>
+                        </li>
+                        <li v-if="timelineEvents.length === 0">No timeline available.</li>
+                    </ul>
+                </div>
             </div>
         </div>
     </div>
@@ -115,7 +140,15 @@ const props = defineProps({
     getMeta: Function,
     trackingNumber: String,
     orderId: [String, Number],
+    sourceType: {
+        type: String,
+        default: "order", // or 'replacement'
+    },
 });
+
+const baseUrl = computed(() =>
+    props.sourceType === "replacement" ? `/replacements/${props.orderId}` : `/orders/${props.orderId}`
+);
 
 watchEffect(() => {
     const meta = props.getMeta("warehouse_to_export");
@@ -147,7 +180,7 @@ async function exportToWarehouse() {
 
     try {
         const json = await request({
-            url: `/orders/${props.orderId}/export-to-warehouse`,
+            url: `${baseUrl.value}/export-to-warehouse`,
             method: "POST",
             body: { warehouse: selectedWarehouse.value },
         });
@@ -176,7 +209,7 @@ async function revalidateAddress() {
     validating.value = true;
     try {
         const result = await request({
-            url: `/orders/${props.orderId}/revalidate-address`,
+            url: `${baseUrl.value}/revalidate-address`,
             method: "POST",
             body: { force: false },
         });
@@ -208,7 +241,7 @@ const forceValidateAddress = async () => {
         forceValidating.value = true;
 
         const result = await request({
-            url: `/orders/${props.orderId}/revalidate-address`,
+            url: `${baseUrl.value}/revalidate-address`,
             method: "POST",
             body: { force: true },
         });
@@ -234,4 +267,46 @@ const forceValidateAddress = async () => {
         forceValidating.value = false;
     }
 };
+
+const timelineEvents = ref([]);
+const loadingTimeline = ref(false);
+
+async function loadShipBobTimeline() {
+    loadingTimeline.value = true;
+
+    const warehouseShipmentId = props.getMeta("warehouse_shipment_id") || "";
+    console.log("Loading ShipBob timeline for ID:", warehouseShipmentId);
+    try {
+        console.log("Fetching ShipBob timeline...");
+        const response = await fetch(`https://api.shipbob.com/2.0/shipment/${warehouseShipmentId}/timeline`, {
+            headers: {
+                Authorization: "Bearer 3E673925F80C19A56356A01DEA7E6CA85E4D5A6A50B0512AC92E2977AF37EBBD-1",
+            },
+        });
+
+        if (!response.ok) throw new Error("API request failed");
+
+        const data = await response.json();
+        timelineEvents.value = data;
+    } catch (err) {
+        console.error("❌ Failed to load timeline:", err);
+        timelineEvents.value = [];
+    } finally {
+        loadingTimeline.value = false;
+    }
+}
+
+watchEffect(() => {
+    const toExport = props.getMeta("warehouse_to_export");
+    const shipmentId = props.getMeta("warehouse_shipment_id");
+    const alreadyLoaded = timelineEvents.value.length > 0;
+    const isBusy = loadingTimeline.value;
+
+    const shouldLoad = toExport === "shipbob" && !!shipmentId && !alreadyLoaded && !isBusy;
+
+    if (shouldLoad) {
+        console.log("📦 Loading timeline now!");
+        loadShipBobTimeline();
+    }
+});
 </script>

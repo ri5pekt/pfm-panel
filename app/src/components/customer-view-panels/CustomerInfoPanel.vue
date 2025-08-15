@@ -1,3 +1,4 @@
+<!-- CustomerInfoPanel.vue -->
 <template>
     <div class="panel customer-info-panel">
         <h3>Customer Info</h3>
@@ -5,82 +6,71 @@
         <div v-else-if="customer">
             <div>
                 <p><strong>ID: </strong> {{ customer.id }}</p>
-                <p>
-                    <strong>Name: </strong>
-                    <template v-if="editing">
-                        <n-input
-                            v-model:value="editable.billing.first_name"
-                            placeholder="First name"
-                            style="width: 120px; margin-right: 8px"
-                        />
-                        <n-input
-                            v-model:value="editable.billing.last_name"
-                            placeholder="Last name"
-                            style="width: 120px"
-                        />
-                    </template>
-                    <template v-else>{{ customer.billing?.first_name }} {{ customer.billing?.last_name }}</template>
-                </p>
-                <p>
-                    <strong>Email: </strong>
-                    <template v-if="editing">
-                        <n-input v-model:value="editable.email" type="email" placeholder="Email" style="width: 250px" />
-                    </template>
-                    <template v-else>{{ customer.email }}</template>
-                </p>
-                <p>
-                    <strong>Phone: </strong>
-                    <template v-if="editing">
-                        <n-input v-model:value="editable.billing.phone" placeholder="Phone" style="width: 180px" />
-                    </template>
-                    <template v-else>{{ customer.billing?.phone || "—" }}</template>
-                </p>
+
                 <p><strong>Orders: </strong> {{ customer.orders_count }}</p>
                 <p><strong>Registered: </strong> {{ customer.registered }}</p>
                 <p><strong>Last Order Date: </strong> {{ customer.last_order_date || "—" }}</p>
             </div>
             <div class="address-columns" style="margin-top: 1rem">
                 <div class="address-section">
-                    <h4>Billing Address</h4>
+                    <div style="display: flex; align-items: center; gap: 8px">
+                        <h4>Billing Address</h4>
+                        <n-button v-if="editing" size="tiny" @click="copyFromShipping"> Copy from shipping </n-button>
+                    </div>
                     <template v-if="editing">
+                        <n-input v-model:value="editable.billing.first_name" placeholder="First name" />
+                        <n-input v-model:value="editable.billing.last_name" placeholder="Last name" />
                         <n-input v-model:value="editable.billing.address_1" placeholder="Address 1" />
                         <n-input v-model:value="editable.billing.address_2" placeholder="Address 2" />
                         <n-input v-model:value="editable.billing.city" placeholder="City" />
                         <n-input v-model:value="editable.billing.state" placeholder="State" />
                         <n-input v-model:value="editable.billing.postcode" placeholder="Postcode" />
                         <n-input v-model:value="editable.billing.country" placeholder="Country" />
+                        <n-input v-model:value="editable.billing.phone" placeholder="Phone" />
+                        <n-input v-model:value="editable.billing.email" placeholder="Email" />
                     </template>
                     <template v-else>
-                        <p>
-                            {{ customer.billing?.address_1 }}<br />
-                            {{ customer.billing?.address_2 }}<br />
-                            {{ customer.billing?.city }}, {{ customer.billing?.postcode }}<br />
-                            {{ customer.billing?.state }}, {{ customer.billing?.country }}
-                        </p>
+                        <div>
+                            <p>{{ customer.billing?.first_name }} {{ customer.billing?.last_name }}</p>
+                            <p>{{ customer.billing?.address_1 }}</p>
+                            <p>{{ customer.billing?.address_2 }}</p>
+                            <p>{{ customer.billing?.city }}, {{ customer.billing?.postcode }}</p>
+                            <p>{{ customer.billing?.state }}, {{ customer.billing?.country }}</p>
+                            <strong>Phone:</strong>
+                            <p>{{ customer.billing?.phone }}</p>
+                            <strong>Email:</strong>
+                            <p>{{ customer.billing?.email }}</p>
+                        </div>
                     </template>
                 </div>
                 <div class="address-section">
-                    <h4>Shipping Address</h4>
+                    <div style="display: flex; align-items: center; gap: 8px">
+                        <h4>Shipping Address</h4>
+                        <n-button v-if="editing" size="tiny" @click="copyFromBilling"> Copy from billing </n-button>
+                    </div>
                     <template v-if="editing">
                         <n-input v-model:value="editable.shipping.first_name" placeholder="First name" />
                         <n-input v-model:value="editable.shipping.last_name" placeholder="Last name" />
-                        <n-input v-model:value="editable.shipping.phone" placeholder="Phone" />
                         <n-input v-model:value="editable.shipping.address_1" placeholder="Address 1" />
                         <n-input v-model:value="editable.shipping.address_2" placeholder="Address 2" />
                         <n-input v-model:value="editable.shipping.city" placeholder="City" />
                         <n-input v-model:value="editable.shipping.state" placeholder="State" />
                         <n-input v-model:value="editable.shipping.postcode" placeholder="Postcode" />
                         <n-input v-model:value="editable.shipping.country" placeholder="Country" />
+                        <n-input v-model:value="editable.shipping.phone" placeholder="Phone" />
                     </template>
                     <template v-else>
-                        <p>
-                            {{ customer.shipping?.first_name }} {{ customer.shipping?.last_name }}<br />
-                            <span v-if="customer.shipping?.phone"> {{ customer.shipping?.phone }}<br /></span>
-                            {{ customer.shipping?.address_1 }}<br />
-                            {{ customer.shipping?.address_2 }}<br />
-                            {{ customer.shipping?.city }}, {{ customer.shipping?.postcode }}<br />
-                            {{ customer.shipping?.state }}, {{ customer.shipping?.country }}
-                        </p>
+                        <div>
+                            <p>{{ customer.shipping?.first_name }} {{ customer.shipping?.last_name }}</p>
+                            <p>{{ customer.shipping?.address_1 }}</p>
+                            <p>{{ customer.shipping?.address_2 }}</p>
+                            <p>{{ customer.shipping?.city }}, {{ customer.shipping?.postcode }}</p>
+                            <p>{{ customer.shipping?.state }}, {{ customer.shipping?.country }}</p>
+                            <div v-if="customer.shipping?.phone">
+                                <strong>Phone:</strong>
+                                <p>{{ customer.shipping?.phone }}</p>
+                            </div>
+                        </div>
                     </template>
                 </div>
             </div>
@@ -96,7 +86,12 @@
                     </n-space>
                 </template>
                 <template v-else>
-                    <n-button size="medium" @click="enterEdit">Edit</n-button>
+                    <n-space>
+                        <n-button size="medium" @click="enterEdit">Edit</n-button>
+                        <n-button v-if="$can('assume_user')" :loading="assumeUserLoading" @click="assumeUser"
+                            >Login as This Customer
+                        </n-button>
+                    </n-space>
                 </template>
             </div>
         </div>
@@ -115,6 +110,8 @@ const props = defineProps({
     customer: Object,
     loading: Boolean,
 });
+const assumeUserLoading = ref(false);
+
 const emit = defineEmits(["updateCustomer"]);
 
 const message = useMessage();
@@ -181,5 +178,42 @@ async function save() {
     } finally {
         saving.value = false;
     }
+}
+
+async function assumeUser() {
+    assumeUserLoading.value = true;
+    try {
+        const res = await request({
+            url: `/customers/${props.customer.id}/assume_user`,
+            method: "POST",
+        });
+        if (res.switch_url) {
+            console.log(res.switch_url);
+            window.location.href = res.switch_url;
+            assumeUserLoading.value = false;
+        } else {
+            console.log("Switch URL not returned:", res);
+            assumeUserLoading.value = false;
+        }
+    } catch (err) {
+        console.error("Assume user failed:", err);
+        assumeUserLoading.value = false;
+    }
+}
+
+function copyFromShipping() {
+    const keys = ["first_name", "last_name", "phone", "address_1", "address_2", "city", "state", "postcode", "country"];
+    keys.forEach((key) => {
+        editable.value.billing[key] = editable.value.shipping[key] || "";
+    });
+    message.success("Copied from shipping 📦 → 🧾");
+}
+
+function copyFromBilling() {
+    const keys = ["first_name", "last_name", "phone", "address_1", "address_2", "city", "state", "postcode", "country"];
+    keys.forEach((key) => {
+        editable.value.shipping[key] = editable.value.billing[key] || "";
+    });
+    message.success("Copied from billing 🧾 → 📦");
 }
 </script>

@@ -88,6 +88,437 @@ class PFMP_REST_Orders {
             'callback' => [$this, 'get_order_notes'],
             'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
         ]);
+
+
+        register_rest_route(
+            'pfm-panel/v1',
+            '/orders/(?P<id>\d+)/restore',
+            [
+                'methods'  => 'POST',
+                'callback' => [$this, 'restore_order'],
+                'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
+            ]
+        );
+
+        register_rest_route('pfm-panel/v1', '/customers/search', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'search_customers_by'],
+            'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
+            'args' => [
+                'type' => [
+                    'required' => true,
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+                'value' => [
+                    'required' => true,
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+            ],
+        ]);
+
+
+        register_rest_route('pfm-panel/v1', '/orders/latest-id', [
+            'methods'  => WP_REST_Server::READABLE,
+            'callback' => [$this, 'get_latest_order_id'],
+            'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
+        ]);
+
+        register_rest_route('pfm-panel/v1', '/orders/braintree-info', [
+            'methods'             => WP_REST_Server::CREATABLE, // POST
+            'callback'            => [$this, 'get_braintree_info'],
+            'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
+        ]);
+
+        register_rest_route('pfm-panel/v1', '/orders/(?P<order_id>\d+)/preview', [
+            'methods'  => WP_REST_Server::READABLE,
+            'callback' => [$this, 'get_order_preview'],
+            'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
+        ]);
+
+        register_rest_route('pfm-panel/v1', '/orders/(?P<id>\d+)/resend-email', [
+            'methods'             => WP_REST_Server::CREATABLE, // POST
+            'callback'            => [$this, 'resend_order_email'],
+            'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
+            'args'                => [
+                'type' => ['sanitize_callback' => 'sanitize_text_field'], // processing | completed | invoice
+            ],
+        ]);
+    }
+
+
+    public function resend_order_email(WP_REST_Request $request) {
+        $order_id = absint($request['id']);
+        $type     = $request->get_param('type') ?: 'processing'; // processing|completed|invoice
+        $force    = (bool) $request->get_param('force');         // optional
+        $force = true;
+
+        $order = wc_get_order($order_id);
+        if (! $order) {
+            return new WP_Error('not_found', 'Order not found', ['status' => 404]);
+        }
+
+        $current_user = wp_get_current_user();
+        $admin_name   = $current_user->display_name ?: 'Admin';
+
+        $type_to_id = [
+            'processing' => 'customer_processing_order',
+            'completed'  => 'customer_completed_order',
+            'invoice'    => 'customer_invoice',
+        ];
+        $type_to_class = [
+            'processing' => 'WC_Email_Customer_Processing_Order',
+            'completed'  => 'WC_Email_Customer_Completed_Order',
+            'invoice'    => 'WC_Email_Customer_Invoice',
+        ];
+
+        $email_id    = $type_to_id[$type] ?? 'customer_processing_order';
+        $email_class = $type_to_class[$type] ?? 'WC_Email_Customer_Processing_Order';
+
+        $mailer = WC()->mailer();
+        if (! $mailer) {
+            return new WP_Error('mailer_unavailable', 'Mailer not available', ['status' => 500]);
+        }
+
+        $emails = $mailer->get_emails();
+
+        // summarize available templates for debugging
+        $available = [];
+        foreach ((array) $emails as $key => $obj) {
+            $available[] = [
+                'key'     => $key,
+                'id'      => $obj->id ?? null,
+                'class'   => get_class($obj),
+                'enabled' => method_exists($obj, 'is_enabled') ? ($obj->is_enabled() ? 'yes' : 'no') : 'n/a',
+            ];
+        }
+
+        // find target by id first, then by class key
+        $target = null;
+        foreach ((array) $emails as $key => $email_obj) {
+            if (isset($email_obj->id) && $email_obj->id === $email_id) {
+                $target = $email_obj;
+                break;
+            }
+        }
+        if (! $target && isset($emails[$email_class])) {
+            $target = $emails[$email_class];
+        }
+
+        if (! $target) {
+            return new WP_Error(
+                'email_not_found',
+                'Email template not available',
+                ['status' => 500, 'available' => $available]
+            );
+        }
+
+        $was_enabled = method_exists($target, 'is_enabled') ? ($target->is_enabled() ? 'yes' : 'no') : 'n/a';
+
+        // Optionally force-enable
+        $restore_enabled = null;
+        if ($force && method_exists($target, 'is_enabled') && ! $target->is_enabled()) {
+            $restore_enabled = $target->enabled; // 'yes'/'no'
+            $target->enabled = 'yes';
+        }
+
+        try {
+            if ($email_id === 'customer_invoice') {
+                // safer signature for invoice
+                $target->trigger($order_id, $order);
+            } else {
+                $target->trigger($order_id);
+            }
+
+            if ($restore_enabled !== null) {
+                $target->enabled = $restore_enabled;
+            }
+
+            $order->add_order_note(sprintf(
+                "📧 Resent '%s' email to customer by %s via PFM Panel.",
+                $email_id,
+                $admin_name
+            ));
+            $order->save();
+
+            return rest_ensure_response(['success' => true, 'email_id' => $email_id]);
+        } catch (Throwable $e) {
+            if ($restore_enabled !== null) {
+                $target->enabled = $restore_enabled;
+            }
+            PFMP_Utils::log("❌ [ResendEmail] Exception: " . $e->getMessage() . "\n" . $e->getTraceAsString());
+            return new WP_Error('email_send_failed', $e->getMessage(), ['status' => 500]);
+        }
+    }
+
+
+
+    public function get_order_preview(WP_REST_Request $request) {
+        $order_id = absint($request['order_id']);
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            return new WP_Error('not_found', 'Order not found', ['status' => 404]);
+        }
+
+        $items = [];
+        foreach ($order->get_items('line_item') as $item) {
+            $product = $item->get_product();
+            $items[] = [
+                'id'       => $item->get_id(),
+                'name'     => $product ? $product->get_name() : $item->get_name(),
+                'quantity' => $item->get_quantity(),
+                'total_raw' => $item->get_total(),
+                'currency'  => $order->get_currency(),
+                'image' => wp_get_attachment_image_url($product->get_image_id(), 'woocommerce_thumbnail'),
+            ];
+        }
+
+        return rest_ensure_response(['items' => $items]);
+    }
+
+
+    private function get_avs_text($code) {
+        $map = [
+            'M' => 'matches',                         // Street/Postal matches
+            'N' => 'does not match',                  // Street/Postal does not match
+            'U' => 'not verified',                    // Received but not verified
+            'I' => 'not provided',                    // No info provided
+            'A' => 'not applicable',                  // Not supported for transaction type
+            'B' => 'skipped',                         // AVS skipped
+            'S' => 'bank does not support',           // Bank doesn’t participate
+            'E' => 'system error',                    // AVS system error
+        ];
+        return $map[$code] ?? $code;
+    }
+
+    private function get_cvv_text($code) {
+        $map = [
+            'M' => 'matches',                         // CVV matches
+            'N' => 'does not match',                  // CVV does not match
+            'U' => 'not verified',                    // Received but not verified
+            'I' => 'not provided',                    // No CVV provided
+            'S' => 'does not participate',            // Bank doesn’t participate
+            'A' => 'not applicable',                  // Not supported for transaction type
+            'B' => 'skipped',                         // CVV skipped
+        ];
+        return $map[$code] ?? $code;
+    }
+
+    public function get_braintree_info(WP_REST_Request $request) {
+        $transaction_id = sanitize_text_field($request->get_param('transaction_id'));
+        if (!$transaction_id) {
+            return rest_ensure_response(['transaction' => null, 'disputes' => []]);
+        }
+
+        try {
+            $this->configure_braintree();
+
+            // Try to load the transaction (primary source of truth for disputes)
+            $tx = null;
+            try {
+                $t = \Braintree\Transaction::find($transaction_id);
+
+                // --- Transaction: only the fields you requested ---
+                $tx = [
+                    'id'            => $t->id ?? null,
+                    'status'        => $t->status ?? null,
+                    'avs'           => [
+                        'street' => [
+                            'code' => $t->avsStreetAddressResponseCode ?? null,
+                            'text' => $this->get_avs_text($t->avsStreetAddressResponseCode ?? null),
+                        ],
+                        'postal' => [
+                            'code' => $t->avsPostalCodeResponseCode ?? null,
+                            'text' => $this->get_avs_text($t->avsPostalCodeResponseCode ?? null),
+                        ],
+                    ],
+                    'cvv_response'  => [
+                        'code' => $t->cvvResponseCode ?? null,
+                        'text' => $this->get_cvv_text($t->cvvResponseCode ?? null),
+                    ],
+                    'risk'          => (isset($t->riskData) && $t->riskData) ? [
+                        'decision' => $t->riskData->decision ?? null,
+                        'id'       => $t->riskData->id ?? null,
+                        'score'    => $t->riskData->score ?? null,
+                    ] : null,
+                ];
+
+                // --- Disputes: taken directly from the transaction object ---
+                $disputes_data = (isset($t->disputes) && is_array($t->disputes))
+                    ? array_map(function ($d) {
+                        return [
+                            'id'            => $d->id ?? null,
+                            'status'        => $d->status ?? null,
+                            'reason'        => $d->reason ?? null,
+                            'amount'        => $d->amount ?? null,
+                            'currency'      => $d->currencyIsoCode ?? null,
+                            'received_date' => isset($d->receivedDate) ? $d->receivedDate->format('Y-m-d') : null,
+                            'reply_by'      => isset($d->replyByDate) ? $d->replyByDate->format('Y-m-d') : null,
+                            'transaction_id' => $d->transactionDetails->id ?? null,
+                        ];
+                    }, $t->disputes)
+                    : [];
+
+                return rest_ensure_response([
+                    'transaction' => $tx,
+                    'disputes'    => $disputes_data,
+                ]);
+            } catch (\Braintree\Exception\NotFound $e) {
+                // Optional fallback: if the transaction isn't found, try dispute search anyway
+                $fallback_disputes = [];
+                $res = \Braintree\Dispute::search([
+                    \Braintree\DisputeSearch::transactionId()->is($transaction_id),
+                ]);
+                foreach ($res as $d) {
+                    $fallback_disputes[] = [
+                        'id'            => $d->id ?? null,
+                        'status'        => $d->status ?? null,
+                        'reason'        => $d->reason ?? null,
+                        'amount'        => $d->amount ?? null,
+                        'currency'      => $d->currencyIsoCode ?? null,
+                        'received_date' => isset($d->receivedDate) ? $d->receivedDate->format('Y-m-d') : null,
+                        'reply_by'      => isset($d->replyByDate) ? $d->replyByDate->format('Y-m-d') : null,
+                        'transaction_id' => $d->transactionDetails->id ?? null,
+                    ];
+                }
+
+                return rest_ensure_response([
+                    'transaction' => null,
+                    'disputes'    => $fallback_disputes,
+                ]);
+            }
+        } catch (\Exception $e) {
+            return new WP_Error('braintree_error', $e->getMessage(), ['status' => 500]);
+        }
+    }
+
+
+    private function configure_braintree() {
+        $cfg = get_option('woocommerce_braintree_api_settings');
+        if (!$cfg) return;
+
+        $env = $cfg['environment'];
+        \Braintree\Configuration::environment($env);
+        \Braintree\Configuration::merchantId($cfg[$env . '_merchant_id']);
+        \Braintree\Configuration::publicKey($cfg[$env . '_public_key']);
+        \Braintree\Configuration::privateKey($cfg[$env . '_private_key']);
+    }
+
+    public function get_latest_order_id(WP_REST_Request $request) {
+        try {
+            $orders = wc_get_orders([
+                'limit'   => 1,
+                'orderby' => 'date',
+                'order'   => 'DESC',
+                'return'  => 'ids',
+                'type'     => 'shop_order'
+            ]);
+
+            $latest_id = $orders[0] ?? 0;
+
+            return rest_ensure_response(['latest_id' => $latest_id]);
+        } catch (Throwable $e) {
+            return new WP_Error('latest_id_fetch_failed', 'Failed to fetch latest order ID.', ['status' => 500]);
+        }
+    }
+
+
+    public function search_customers_by(WP_REST_Request $request) {
+        $type  = $request->get_param('type');
+        $value = $request->get_param('value');
+
+        if (empty($type) || empty($value)) {
+            return new WP_Error('invalid_params', 'Search type and value are required.', ['status' => 400]);
+        }
+
+        $results = [];
+        $users   = [];
+
+        if ($type === 'email') {
+            $email = sanitize_email($value);
+            $users = get_users([
+                'search'         => $email,
+                'search_columns' => ['user_email'],
+                'number'         => 10,
+                'fields'         => ['ID', 'user_email', 'display_name'],
+            ]);
+        } elseif ($type === 'id') {
+            $user = get_userdata(absint($value));
+            if ($user) {
+                $users[] = $user;
+            }
+        } elseif ($type === 'name') {
+            $users = get_users([
+                'search'         => '*' . esc_attr($value) . '*',
+                'search_columns' => ['display_name'],
+                'number'         => 10,
+                'fields'         => ['ID', 'user_email', 'display_name'],
+            ]);
+        } else {
+            return new WP_Error('unsupported_type', 'Unsupported search type.', ['status' => 400]);
+        }
+
+        foreach ($users as $user) {
+            $user_id = $user->ID;
+
+            $billing_fields = [
+                'first_name',
+                'last_name',
+                'email',
+                'phone',
+                'address_1',
+                'address_2',
+                'city',
+                'state',
+                'postcode',
+                'country',
+            ];
+            $shipping_fields = [
+                'first_name',
+                'last_name',
+                'phone',
+                'address_1',
+                'address_2',
+                'city',
+                'state',
+                'postcode',
+                'country',
+            ];
+
+            $billing = [];
+            foreach ($billing_fields as $field) {
+                $billing[$field] = get_user_meta($user_id, 'billing_' . $field, true);
+            }
+
+            $shipping = [];
+            foreach ($shipping_fields as $field) {
+                $shipping[$field] = get_user_meta($user_id, 'shipping_' . $field, true);
+            }
+
+            $results[] = [
+                'id'      => $user_id,
+                'email'   => $user->user_email,
+                'name'    => $user->display_name,
+                'billing' => $billing,
+                'shipping' => $shipping,
+            ];
+        }
+
+        return rest_ensure_response($results);
+    }
+
+    public function restore_order($request) {
+        $current_user = wp_get_current_user();
+        $admin_name = $current_user->display_name ?? 'Admin';
+        $admin_roles = $current_user->roles ?? [];
+
+        $order_id = (int) $request['id'];
+
+        do_action('restore_archive_order', $order_id);
+
+        $order = wc_get_order($order_id);
+        $order->add_order_note('Order restored from archive by ' . $admin_name);
+
+        return rest_ensure_response(['success' => true]);
     }
 
     function get_order_notes(WP_REST_Request $request) {
@@ -256,12 +687,32 @@ class PFMP_REST_Orders {
                 if (isset($ship_data['method_title'])) {
                     $item->set_name(wp_strip_all_tags($ship_data['method_title']));
                 }
+
+                if (isset($ship_data['method_id'])) {
+                    // Parse "flat_rate:10" into method_id and instance_id
+                    $parts = explode(':', $ship_data['method_id']);
+                    $method_id = $parts[0] ?? '';
+                    $instance_id = isset($parts[1]) ? absint($parts[1]) : 0;
+
+                    $item->update_meta_data('method_id', $method_id);
+                    $item->update_meta_data('instance_id', $instance_id);
+
+                    // Also update Woo’s expected keys
+                    $item->update_meta_data('method_id', $method_id);
+                    $item->update_meta_data('instance_id', $instance_id);
+                    $item->update_meta_data('shipping_method', $method_id);
+                    $item->update_meta_data('_method_id', $method_id);
+                    $item->update_meta_data('_instance_id', $instance_id);
+                }
+
                 if (isset($ship_data['total'])) {
                     $item->set_total(floatval($ship_data['total']));
                 }
+
                 if (isset($ship_data['tax'])) {
                     pfmp_set_single_tax($item, $ship_data['tax'], 'shipping');
                 }
+
                 $item->save();
                 $updated = true;
             }
@@ -399,6 +850,7 @@ class PFMP_REST_Orders {
         if ($updated) {
             $order->add_order_note('Order items were edited by ' . $admin_name);
             if ($auto_tax) {
+                /*
                 if (class_exists('WC_Complyt_Tax') && method_exists('WC_Complyt_Tax', 'init') && method_exists('WC_Complyt_Tax', 'get_instance')) {
                     WC_Complyt_Tax::init();
                     $complyt = WC_Complyt_Tax::get_instance();
@@ -414,10 +866,15 @@ class PFMP_REST_Orders {
                     'postcode' => $order->get_billing_postcode(),
                     'city'     => $order->get_billing_city(),
                 ];
-
+                
                 $order->calculate_taxes($billing);
                 $order->calculate_totals(false);
                 $order->save();
+                */
+                PFMP_Utils::log("🧾 Auto-tax recalculation triggered for order ID {$order_id} by {$admin_name}.");
+
+                if (class_exists('WC_Complyt_Tax') && method_exists('WC_Complyt_Tax', 'init')) WC_Complyt_Tax::init();
+                apply_filters('get_rate_for_order_or_subscription', $order_id, null);
             } else {
                 // --- BEGIN: Remove orphaned tax lines and recalc tax totals ---
                 $order_item_tax_totals = [];
@@ -645,9 +1102,9 @@ class PFMP_REST_Orders {
     public function refund_order_items(WP_REST_Request $request) {
         try {
             $order_id = absint($request['id']);
-            $params = $request->get_json_params();
+            $params   = $request->get_json_params();
+            $order    = wc_get_order($order_id);
 
-            $order = wc_get_order($order_id);
             if (!$order) {
                 return new WP_Error('invalid_order', 'Order not found', ['status' => 404]);
             }
@@ -656,156 +1113,240 @@ class PFMP_REST_Orders {
             $refund_fees     = $params['fees'] ?? [];
             $refund_shipping = $params['shipping'] ?? [];
 
+            PFMP_Utils::log("🧾 Refund request received for Order #$order_id");
+            PFMP_Utils::log("🧾 Refund items: " . print_r($refund_items, true));
+            PFMP_Utils::log("🧾 Refund fees: " . print_r($refund_fees, true));
+            PFMP_Utils::log("🧾 Refund shipping: " . print_r($refund_shipping, true));
 
-
-            // 🔍 Try to get tax_rate_id from tax items
+            // Get tax rate (if one and only one exists)
             $tax_rate_id = null;
-            $tax_items = $order->get_items('tax');
+            $tax_items   = $order->get_items('tax');
             if (count($tax_items) === 1) {
-                $tax_item = current($tax_items);
-                $tax_rate_id = $tax_item->get_rate_id();
+                $tax_rate_id = current($tax_items)->get_rate_id();
             }
 
-            $refund_ids = [];
-
-            // 🔀 Group items by transaction ID
+            $refund_ids  = [];
             $items_by_tx = ['default' => []];
+
             foreach ($refund_items as $item) {
                 $tx_id = $item['transaction_id'] ?? 'default';
                 $items_by_tx[$tx_id][] = $item;
             }
+            // Make sure fees/shipping also respect transactions if you ever send tx on them
+            $fees_by_tx = ['default' => $refund_fees];
+            $ship_by_tx = ['default' => $refund_shipping];
 
             foreach ($items_by_tx as $tx_id => $grouped_items) {
                 $refund_data = [
-                    'order_id'       => $order_id,
-                    'refund_reason'  => 'Refund via PFM Panel',
-                    'line_items'     => [],
-                    'shipping_items' => [],
-                    'amount'         => 0,
-                    'restock_items'  => false,
+                    'order_id'      => $order_id,
+                    'refund_reason' => !empty($params['reason']) ? sanitize_textarea_field($params['reason']) : 'Refund via PFM Panel',
+                    'line_items'    => [],
+                    'restock_items' => false,
                 ];
 
-                $total_refund = 0;
+                // Two different totals:
+                // - $bt_total_refund: send "as-is" (raw request) to Braintree
+                // - $wc_total_refund: Woo refund amount built from normalized (snapped) lines
+                $bt_total_refund = 0.0;
+                $wc_total_refund = 0.0;
 
+                // 🔁 PRODUCTS
                 foreach ($grouped_items as $item) {
                     $item_id = absint($item['id']);
-                    $qty     = absint($item['quantity']);
-                    $total   = floatval($item['total']);
-                    $tax     = floatval($item['tax']);
-
-                    if ($total === 0 && $tax === 0) {
+                    $qty     = isset($item['quantity']) ? absint($item['quantity']) : 0;
+                    $req_total = floatval($item['total']);
+                    $req_tax   = floatval($item['tax']);
+                    if ($req_total === 0.0 && $req_tax === 0.0) {
                         continue;
                     }
 
+                    // BT: add raw
+                    $bt_total_refund += ($req_total + $req_tax);
+
+                    // WC: snap to original if "almost equal"
                     $order_item = $order->get_item($item_id);
                     if (!$order_item) {
                         continue;
                     }
 
+                    $orig_total = (float) $order_item->get_total();
+                    $orig_tax   = array_sum($order_item->get_taxes()['total'] ?? []);
+
+                    $wc_total   = $req_total;
+                    $wc_tax     = $req_tax;
+
+                    if (abs($orig_total - $req_total) < 0.1) {
+                        $wc_total = $orig_total;
+                        PFMP_Utils::log("🔧 Adjusted product total for item $item_id to match original ($wc_total)");
+                    }
+                    if (abs($orig_tax - $req_tax) < 0.1) {
+                        $wc_tax = $orig_tax;
+                        PFMP_Utils::log("🔧 Adjusted product tax for item $item_id to match original ($wc_tax)");
+                    }
+
                     $line = array_filter([
                         'qty'          => $qty > 0 ? $qty : null,
-                        'refund_total' => $total,
+                        'refund_total' => $wc_total,
                     ]);
 
-                    if ($tax > 0) {
-                        if (!$tax_rate_id) {
-                            return new WP_Error('tax_rate_error', 'Tax refund requested but no valid tax rate found.', ['status' => 400]);
+                    if ($wc_tax > 0) {
+                        $taxes = $order_item->get_taxes();
+                        $line['refund_tax'] = [];
+
+                        if (!empty($taxes['total'])) {
+                            $total_tax_original = array_sum($taxes['total']);
+                            if ($total_tax_original != 0.0) {
+                                foreach ($taxes['total'] as $rate_id => $tax_value) {
+                                    $ratio = $tax_value / $total_tax_original;
+                                    $line['refund_tax'][$rate_id] = round($wc_tax * $ratio, 2);
+                                }
+                            }
                         }
-                        $line['refund_tax'] = [$tax_rate_id => $tax];
                     }
 
                     $refund_data['line_items'][$item_id] = $line;
-                    $total_refund += $total + $tax;
+                    $wc_total_refund += ($wc_total + (isset($line['refund_tax']) ? array_sum($line['refund_tax']) : 0));
                 }
 
-                if ($tx_id === 'default') {
-                    // Add fees and shipping only once
-                    foreach ($refund_fees as $fee) {
-                        $fee_id = absint($fee['id']);
-                        $total  = floatval($fee['total']);
-                        $tax    = floatval($fee['tax']);
-
-                        if ($total === 0 && $tax === 0) {
-                            continue;
-                        }
-
-                        $order_fee = $order->get_item($fee_id);
-                        if (!$order_fee) {
-                            continue;
-                        }
-
-                        $line = array_filter([
-                            'qty'          => null,
-                            'refund_total' => $total,
-                        ]);
-
-                        if ($tax > 0) {
-                            if (!$tax_rate_id) {
-                                return new WP_Error('tax_rate_error', 'Tax refund requested but no valid tax rate found.', ['status' => 400]);
-                            }
-                            $line['refund_tax'] = [$tax_rate_id => $tax];
-                        }
-
-                        $refund_data['line_items'][$fee_id] = $line;
-                        $total_refund += $total + $tax;
+                // 💸 FEES
+                foreach ($fees_by_tx[$tx_id] ?? [] as $fee) {
+                    $fee_id    = absint($fee['id']);
+                    $req_total = floatval($fee['total']);
+                    $req_tax   = floatval($fee['tax']);
+                    if ($req_total === 0.0 && $req_tax === 0.0) {
+                        continue;
                     }
 
-                    foreach ($refund_shipping as $shipping) {
-                        $shipping_id = absint($shipping['id']);
-                        $total       = floatval($shipping['total']);
-                        $tax         = floatval($shipping['tax']);
+                    // BT: raw
+                    $bt_total_refund += ($req_total + $req_tax);
 
-                        if ($total === 0 && $tax === 0) {
-                            continue;
-                        }
-
-                        $order_shipping = $order->get_item($shipping_id);
-                        if (!$order_shipping) {
-                            continue;
-                        }
-
-                        $line = array_filter([
-                            'refund_total' => $total,
-                        ]);
-
-                        if ($tax > 0) {
-                            if (!$tax_rate_id) {
-                                return new WP_Error('tax_rate_error', 'Tax refund requested but no valid tax rate found.', ['status' => 400]);
-                            }
-                            $line['refund_tax'] = [$tax_rate_id => $tax];
-                        }
-
-                        $refund_data['line_items'][$shipping_id] = $line;
-                        $total_refund += $total + $tax;
+                    // WC: snap
+                    $order_fee   = $order->get_item($fee_id);
+                    if (!$order_fee) {
+                        continue;
                     }
+
+                    $orig_total  = (float) $order_fee->get_total();
+                    $orig_tax    = array_sum($order_fee->get_taxes()['total'] ?? []);
+
+                    $wc_total = $req_total;
+                    $wc_tax   = $req_tax;
+
+                    if (abs($orig_total - $req_total) < 0.1) {
+                        $wc_total = $orig_total;
+                        PFMP_Utils::log("🔧 Adjusted fee total for fee $fee_id to match original ($wc_total)");
+                    }
+                    if (abs($orig_tax - $req_tax) < 0.1) {
+                        $wc_tax = $orig_tax;
+                        PFMP_Utils::log("🔧 Adjusted fee tax for fee $fee_id to match original ($wc_tax)");
+                    }
+
+                    $line = ['refund_total' => $wc_total];
+                    if ($wc_tax > 0 && $tax_rate_id) {
+                        $line['refund_tax'] = [$tax_rate_id => round($wc_tax, 2)];
+                    }
+
+                    $refund_data['line_items'][$fee_id] = $line;
+                    $wc_total_refund += ($wc_total + (isset($line['refund_tax']) ? array_sum($line['refund_tax']) : 0));
+                }
+
+                // 🚚 SHIPPING
+                foreach ($ship_by_tx[$tx_id] ?? [] as $shipping) {
+                    $shipping_id = absint($shipping['id']);
+                    $req_total   = floatval($shipping['total']);
+                    $req_tax     = floatval($shipping['tax']);
+                    if ($req_total === 0.0 && $req_tax === 0.0) {
+                        continue;
+                    }
+
+                    // BT: raw
+                    $bt_total_refund += ($req_total + $req_tax);
+
+                    // WC: snap
+                    $order_shipping = $order->get_item($shipping_id);
+                    if (!$order_shipping) {
+                        continue;
+                    }
+
+                    $orig_total = (float) $order_shipping->get_total();
+                    $orig_tax   = array_sum($order_shipping->get_taxes()['total'] ?? []);
+
+                    $wc_total = $req_total;
+                    $wc_tax   = $req_tax;
+
+                    if (abs($orig_total - $req_total) < 0.1) {
+                        $wc_total = $orig_total;
+                        PFMP_Utils::log("🔧 Adjusted shipping total for $shipping_id to match original ($wc_total)");
+                    }
+                    if (abs($orig_tax - $req_tax) < 0.1) {
+                        $wc_tax = $orig_tax;
+                        PFMP_Utils::log("🔧 Adjusted shipping tax for $shipping_id to match original ($wc_tax)");
+                    }
+
+                    $line = ['refund_total' => $wc_total];
+                    if ($wc_tax > 0 && $tax_rate_id) {
+                        $line['refund_tax'] = [$tax_rate_id => round($wc_tax, 2)];
+                    }
+
+                    $refund_data['line_items'][$shipping_id] = $line;
+                    $wc_total_refund += ($wc_total + (isset($line['refund_tax']) ? array_sum($line['refund_tax']) : 0));
                 }
 
                 if (empty($refund_data['line_items'])) {
                     continue;
                 }
 
-                $refund_data['amount'] = $total_refund;
+                // --- BRAINTREE: send raw amount (exactly what the UI requested) ---
+                if (!empty($params['refund_via_braintree'])) {
+                    $tx_to_use = ($tx_id === 'default') ? $order->get_transaction_id() : $tx_id;
+                    $bt_amount_str = number_format((float) $bt_total_refund, 2, '.', ''); // BT likes "12.34"
+                    PFMP_Utils::log("🚦 Braintree refund for tx '$tx_to_use' raw total: {$bt_amount_str}");
+                    PFMP_Utils::log(sprintf(
+                        "🚦 Calling refund_braintree_transaction: order_id=%s, amount=%s, reason=%s, tx_id=%s",
+                        $order->get_id(),
+                        $bt_amount_str,
+                        $refund_data['refund_reason'],
+                        $tx_to_use
+                    ));
+                    $result = $this->refund_braintree_transaction(
+                        $order,
+                        $bt_amount_str,
+                        $refund_data['refund_reason'],
+                        $tx_to_use
+                    );
+                    PFMP_Utils::log("🚦 Braintree refund result: " . print_r($result, true));
+                    if (is_wp_error($result)) {
+                        return new WP_REST_Response(['success' => false, 'error' => $result->get_error_message()], 400);
+                    }
+                }
+
+                // --- WOO: use snapped line items/taxes, recompute amount from the lines ---
+                $refund_data['amount'] = wc_format_decimal(array_reduce(
+                    $refund_data['line_items'],
+                    function ($sum, $line) {
+                        $t = (float) ($line['refund_total'] ?? 0);
+                        $x = is_array($line['refund_tax'] ?? null) ? array_sum($line['refund_tax']) : 0;
+                        return $sum + $t + $x;
+                    },
+                    0.0
+                ), 2);
+
+                PFMP_Utils::log("🚦 Final refund_data (WC): " . print_r($refund_data, true));
+                PFMP_Utils::log("💰 WC refund amount (snapped): " . $refund_data['amount']);
 
                 $refund = wc_create_refund($refund_data);
-                if (is_wp_error($refund)) {
+                if (!is_wp_error($refund)) {
+                    $refund->set_reason($refund_data['refund_reason']);
+                    $refund->save();
+                    $order->add_order_note('Refund created: ' . $refund_data['refund_reason']);
+                    $order->save();
+                    $refund_ids[] = $refund->get_id();
+                } else {
+                    PFMP_Utils::log("❌ Refund creation error: " . $refund->get_error_message());
                     return new WP_REST_Response([
                         'success' => false,
                         'error'   => $refund->get_error_message(),
                     ], 400);
-                }
-
-                $refund_ids[] = $refund->get_id();
-
-                // 💳 Braintree
-                if (!empty($params['refund_via_braintree'])) {
-                    $tx_to_use = ($tx_id === 'default') ? $order->get_transaction_id() : $tx_id;
-                    $result = $this->refund_braintree_transaction($order, $total_refund, '', $tx_to_use);
-                    if (is_wp_error($result)) {
-                        return new WP_REST_Response([
-                            'success' => false,
-                            'error'   => $result->get_error_message(),
-                        ], 400);
-                    }
                 }
             }
 
@@ -813,10 +1354,7 @@ class PFMP_REST_Orders {
                 return new WP_Error('no_refund_data', 'Nothing to refund', ['status' => 400]);
             }
 
-            $total_order_amount = floatval($order->get_total()); // Total paid by customer
-            $total_refunded_amount = floatval($order->get_total_refunded()); // Sum of all refunds
-
-            if ($total_refunded_amount >= $total_order_amount) {
+            if ($order->get_total_refunded() >= $order->get_total()) {
                 $order->update_status('refunded', 'Order fully refunded via PFM Panel');
             }
 
@@ -833,6 +1371,8 @@ class PFMP_REST_Orders {
 
 
 
+
+
     public function refund_braintree_transaction($order, $amount, $reason = '', $transaction_id = null) {
         if (!$transaction_id) {
             $transaction_id = $order->get_transaction_id();
@@ -842,6 +1382,9 @@ class PFMP_REST_Orders {
 
             return new WP_Error('refund-error', 'Missing transaction ID for this order.');
         }
+
+        $decimals = wc_get_price_decimals(); // respects currency (e.g., 0 for JPY, 2 for USD)
+        $amount   = number_format(round((float) $amount, $decimals), $decimals, '.', '');
 
         $current_user = wp_get_current_user();
         $admin_name = $current_user->display_name ?? 'Admin';
@@ -900,45 +1443,46 @@ class PFMP_REST_Orders {
     public function get_orders_by_user_id(WP_REST_Request $request) {
         global $wpdb;
 
-        $user_id = absint($request['user_id']);
+        $user_id  = absint($request['user_id']);
         if (!$user_id) {
             return new WP_Error('invalid_user', 'Invalid user ID.', ['status' => 400]);
         }
 
         $per_page = absint($request->get_param('per_page')) ?: 10;
-        $page = absint($request->get_param('page')) ?: 1;
+        $page     = absint($request->get_param('page')) ?: 1;
+        $offset   = ($page - 1) * $per_page;
 
-        // 1. Live Orders (standard WooCommerce)
-        $args = [
-            'customer_id' => $user_id,
-            'limit'       => $per_page,
-            'paged'       => $page,
-            'orderby'     => 'date',
-            'order'       => 'DESC',
-            'status'      => array_keys(wc_get_order_statuses())
-        ];
-
+        // ---- 1) LIVE Woo orders (unchanged) ----
         $live_orders = [];
         try {
-            $orders = wc_get_orders($args);
+            $orders = wc_get_orders([
+                'customer_id' => $user_id,
+                'limit'       => $per_page,
+                'paged'       => $page,
+                'orderby'     => 'date',
+                'order'       => 'DESC',
+                'status'      => array_keys(wc_get_order_statuses())
+            ]);
             foreach ($orders as $order) {
+                $disputed_amount = (float) $order->get_meta('disputed_amount');
                 $live_orders[] = [
-                    'id' => $order->get_id(),
-                    'status' => $order->get_status(),
-                    'total' => $order->get_total(),
-                    'currency' => $order->get_currency(),
-                    'date_created' => $order->get_date_created() ? $order->get_date_created()->date('Y-m-d H:i:s') : null,
-                    'is_archived' => false,
+                    'id'            => $order->get_id(),
+                    'status'        => $order->get_status(),
+                    'total'         => (float) $order->get_total(),
+                    'currency'      => $order->get_currency(),
+                    'date_created'  => $order->get_date_created() ? $order->get_date_created()->date('Y-m-d H:i:s') : null,
+                    'is_archived'   => false,
+                    'is_replacement' => false,
+                    'has_chargeback' => $disputed_amount > 0,
+                    'source'        => 'woo',
                 ];
             }
         } catch (Throwable $e) {
-            // Optionally log or handle error
         }
 
-        // 2. Archived Orders (optimized single query)
+        // ---- 2) ARCHIVED Woo orders (unchanged, add flags) ----
         $archived_orders = [];
         try {
-            $offset = ($page - 1) * $per_page;
             $sql = $wpdb->prepare(
                 "SELECT 
                 p.ID, 
@@ -946,13 +1490,13 @@ class PFMP_REST_Orders {
                 p.post_date_gmt,
                 MAX(CASE WHEN pm.meta_key = '_order_total' THEN pm.meta_value END) AS order_total,
                 MAX(CASE WHEN pm.meta_key = '_order_currency' THEN pm.meta_value END) AS order_currency
-            FROM yom_archive_orders_posts p
-            JOIN yom_archive_orders_postmeta m ON p.ID = m.post_id
-            LEFT JOIN yom_archive_orders_postmeta pm ON p.ID = pm.post_id
+             FROM yom_archive_orders_posts p
+             JOIN yom_archive_orders_postmeta m ON p.ID = m.post_id
+             LEFT JOIN yom_archive_orders_postmeta pm ON p.ID = pm.post_id
             WHERE p.post_type = 'shop_order'
-                AND p.post_status NOT IN ('trash', 'auto-draft')
-                AND m.meta_key = '_customer_user'
-                AND m.meta_value = %s
+              AND p.post_status NOT IN ('trash', 'auto-draft')
+              AND m.meta_key = '_customer_user'
+              AND m.meta_value = %s
             GROUP BY p.ID
             ORDER BY p.post_date_gmt DESC
             LIMIT %d OFFSET %d",
@@ -961,41 +1505,89 @@ class PFMP_REST_Orders {
                 $offset
             );
             $archived_posts = $wpdb->get_results($sql);
-
             foreach ($archived_posts as $post) {
                 $archived_orders[] = [
-                    'id' => intval($post->ID),
-                    'status' => $post->post_status,
-                    'total' => isset($post->order_total) ? floatval($post->order_total) : null,
-                    'currency' => isset($post->order_currency) ? $post->order_currency : '',
-                    'date_created' => $post->post_date_gmt,
-                    'is_archived' => true,
+                    'id'            => (int) $post->ID,
+                    'status'        => $post->post_status,
+                    'total'         => isset($post->order_total) ? (float) $post->order_total : 0.0,
+                    'currency'      => isset($post->order_currency) ? $post->order_currency : get_woocommerce_currency(),
+                    'date_created'  => $post->post_date_gmt,
+                    'is_archived'   => true,
+                    'is_replacement' => false,
+                    'has_chargeback' => false,
+                    'source'        => 'archived',
                 ];
             }
         } catch (Throwable $e) {
-            // Optionally log or handle error
         }
 
-        // 3. Merge and sort
-        $all_orders = array_merge($live_orders, $archived_orders);
+        // ---- 3) REPLACEMENT orders (NEW) ----
+        $replacement_orders = [];
+        try {
+            if (function_exists('wro_get_orders')) {
+                $rep_args = [
+                    'customer_id' => $user_id,
+                    'limit'       => $per_page,
+                    'offset'      => $offset,
+                    'orderby'     => 'date_created',
+                    'order'       => 'DESC',
+                    'paginate'    => true,
+                ];
+                $rep_result = wro_get_orders($rep_args);
+                $rep_list   = $rep_result['orders'] ?? [];
+
+                foreach ($rep_list as $rep) {
+                    // $rep may be an object (WRO_Replacement_Order) or array—handle both
+                    $rep_id    = is_object($rep) ? (int)$rep->id : (int)($rep['id'] ?? 0);
+                    $created   = is_object($rep) ? ($rep->created_at ?? null) : ($rep['created_at'] ?? null);
+                    $status    = is_object($rep) ? ($rep->status ?? '') : ($rep['status'] ?? '');
+                    $items     = is_object($rep) ? ($rep->items ?? []) : ($rep['items'] ?? []);
+
+                    // Compute a simple total from items->total if present
+                    $total = 0.0;
+                    if (is_array($items)) {
+                        foreach ($items as $it) {
+                            $total += (float) ($it['total'] ?? 0);
+                        }
+                    }
+                    $replacement_orders[] = [
+                        'id'            => $rep_id,
+                        'status'        => $status,              // keep native replacement status
+                        'total'         => $total,               // simple sum; good enough for list view
+                        'currency'      => get_woocommerce_currency(),
+                        'date_created'  => $created ?: null,
+                        'is_archived'   => false,
+                        'is_replacement' => true,                 // <-- flag for UI
+                        'has_chargeback' => false,
+                        'source'        => 'replacement',
+                    ];
+                }
+            }
+        } catch (Throwable $e) {
+        }
+
+        // ---- 4) Merge + sort by date ----
+        $all_orders = array_merge($live_orders, $archived_orders, $replacement_orders);
         usort($all_orders, function ($a, $b) {
-            return strtotime($b['date_created']) <=> strtotime($a['date_created']);
+            return strtotime($b['date_created'] ?? '1970-01-01') <=> strtotime($a['date_created'] ?? '1970-01-01');
         });
 
-        // 4. Remove duplicates
+        // ---- 5) De-dup using composite key (source:id) so different sources don't collide ----
         $seen = [];
         $deduped = [];
         foreach ($all_orders as $order) {
-            if (isset($seen[$order['id']])) continue;
-            $deduped[] = $order;
-            $seen[$order['id']] = true;
+            $key = ($order['source'] ?? 'woo') . ':' . $order['id'];
+            if (isset($seen[$key])) continue;
+            $seen[$key] = true;
+            $deduped[]  = $order;
         }
 
-        // 5. Paginate after merging (optional, or just let frontend handle it)
+        // ---- 6) Slice page (same semantics as before) ----
         $result = array_slice($deduped, 0, $per_page);
 
         return rest_ensure_response($result);
     }
+
 
 
     public function update_order(WP_REST_Request $request) {
@@ -1062,6 +1654,14 @@ class PFMP_REST_Orders {
             $updated_profile = true;
         }
 
+        if (isset($params['customer_id']) && is_numeric($params['customer_id'])) {
+            $new_customer_id = absint($params['customer_id']);
+            if ($new_customer_id !== $order->get_customer_id()) {
+                $order->set_customer_id($new_customer_id);
+                $order->add_order_note("Customer changed to user #{$new_customer_id} by $admin_name.");
+            }
+        }
+
         try {
             $order->save();
 
@@ -1085,6 +1685,71 @@ class PFMP_REST_Orders {
     public function get_single_order(WP_REST_Request $request) {
         $order_id = absint($request['id']);
         $order = wc_get_order($order_id);
+        $is_archived = $request->get_param('is_archived');
+
+        if ($is_archived) {
+            global $wpdb;
+            // Fetch from archive tables (example for "General Info" only)
+            $sql = $wpdb->prepare(
+                "SELECT 
+                p.ID, 
+                p.post_status, 
+                p.post_date_gmt,
+                MAX(CASE WHEN pm.meta_key = '_order_total' THEN pm.meta_value END) AS order_total,
+                MAX(CASE WHEN pm.meta_key = '_order_currency' THEN pm.meta_value END) AS order_currency,
+                MAX(CASE WHEN pm.meta_key = '_customer_user' THEN pm.meta_value END) AS customer_id
+            FROM yom_archive_orders_posts p
+            LEFT JOIN yom_archive_orders_postmeta pm ON p.ID = pm.post_id
+            WHERE p.ID = %d
+            GROUP BY p.ID",
+                $order_id
+            );
+            $row = $wpdb->get_row($sql);
+            if (!$row) {
+                return new WP_Error('not_found', 'Order not found', ['status' => 404]);
+            }
+
+
+            // Return a minimal "General Info" order structure
+            $data = [
+                'id' => intval($row->ID),
+                'status' => $row->post_status,
+                'total' => isset($row->order_total) ? floatval($row->order_total) : null,
+                'currency' => isset($row->order_currency) ? $row->order_currency : '',
+                'customer_id' => $row->customer_id,
+                'is_archived' => true,
+                // Add any other info you want to show in "General Info"
+            ];
+
+            $date = $row->post_date_gmt; // or whatever your field is
+            $data['date_created'] = [
+                'date' => $date ? (strpos($date, '.') ? $date : $date . '.000000') : null, // add microseconds if missing
+                'timezone_type' => 1,
+                'timezone' => '+00:00',
+            ];
+
+            $data['billing'] = [
+                'first_name' => '',
+                'last_name'  => '',
+                'email'      => ''
+            ];
+            $customer_id = isset($row->customer_id) ? intval($row->customer_id) : 0;
+            if ($customer_id) {
+                $user = get_userdata($customer_id);
+                if ($user) {
+                    $data['billing']['first_name'] = get_user_meta($customer_id, 'billing_first_name', true) ?: ($user->first_name ?? '');
+                    $data['billing']['last_name']  = get_user_meta($customer_id, 'billing_last_name', true) ?: ($user->last_name ?? '');
+                    $data['billing']['email']      = $user->user_email;
+
+                    $data['customer_profile'] = [
+                        'first_name' => $data['billing']['first_name'],
+                        'last_name'  => $data['billing']['last_name'],
+                        'email'      => $data['billing']['email'],
+                    ];
+                }
+            }
+            return rest_ensure_response($data);
+        }
 
         if (!$order) {
             return new WP_Error('not_found', 'Order not found', ['status' => 404]);
@@ -1124,6 +1789,15 @@ class PFMP_REST_Orders {
             ];
         }, $order->get_refunds());
 
+        $customer_id = $order->get_customer_id();
+        if ($customer_id) {
+            $user = get_userdata($customer_id);
+            if ($user) {
+                $data['customer_profile']['first_name'] = get_user_meta($customer_id, 'billing_first_name', true) ?: ($user->first_name ?? '');
+                $data['customer_profile']['last_name']  = get_user_meta($customer_id, 'billing_last_name', true) ?: ($user->last_name ?? '');
+                $data['customer_profile']['email']      = $user->user_email;
+            }
+        }
 
         $data['transaction_id'] = $order->get_transaction_id() ?? '';
         $data['subscription_branch'] = $this->get_subscription_branch_for_order($order);
@@ -1215,22 +1889,23 @@ class PFMP_REST_Orders {
             }
         }
 
-        // Fallback default
         $data['total_refunded'] = 0;
+        $data['refunded_tax'] = 0;
 
         if ($order) {
-            // For tax (works)
+            // 🧾 Sum all refunded taxes for this item across all rate IDs
             try {
                 $taxes = $item->get_taxes()['total'] ?? [];
-                $rate_id = key($taxes);
-                $data['refunded_tax'] = $rate_id
-                    ? $order->get_tax_refunded_for_item($item->get_id(), $rate_id, $item->get_type())
-                    : 0;
+
+                foreach ($taxes as $rate_id => $original_tax) {
+                    $refunded = $order->get_tax_refunded_for_item($item->get_id(), $rate_id, $item->get_type());
+                    $data['refunded_tax'] += abs(floatval($refunded));
+                }
             } catch (Throwable $e) {
                 $data['refunded_tax'] = 0;
             }
 
-            // ✅ Manual total_refunded logic
+            // ✅ Sum manually refunded item totals
             $refunds = $order->get_refunds();
             foreach ($refunds as $refund) {
                 foreach ($refund->get_items($item->get_type()) as $refunded_item) {
@@ -1244,7 +1919,6 @@ class PFMP_REST_Orders {
 
         return $data;
     }
-
 
 
 
@@ -1431,14 +2105,10 @@ class PFMP_REST_Orders {
             $orders = array_map(function ($order) {
                 $data = $order->get_data();
                 $data['meta_data'] = $order->get_meta_data();
-                $data['meta'] = [
-                    'warehouse_to_export' => $order->get_meta('warehouse_to_export'),
-                    'warehouse_export_status' => $order->get_meta('warehouse_export_status'),
-                    'validate_address_status' => $order->get_meta('validate_address_status'),
-                    '_wc_shipment_tracking_items' => $order->get_meta('_wc_shipment_tracking_items'),
-                    '_subscription_renewal' => $order->get_meta('_subscription_renewal'),
-                    '_subscription_parent' => $order->get_meta('_subscription_parent'),
-                ];
+                $data['coupon_codes'] = array_map(function ($coupon) {
+                    return $coupon->get_code();
+                }, $order->get_items('coupon'));
+                $data['refunded_amount'] = floatval($order->get_total_refunded());
                 return $data;
             }, $query->orders);
 

@@ -42,12 +42,15 @@ export function setCurrency(currency) {
 }
 
 
-export function formatCurrency(amount) {
+export function formatCurrency(amount, currency) {
     if (isNaN(amount)) amount = 0;
+
+    const finalCurrency = currency || currentCurrency.value || "USD";
+
     return new Intl.NumberFormat(undefined, {
         style: "currency",
-        currency: currentCurrency.value,
-        currencyDisplay: "narrowSymbol", // <- this avoids "US$"
+        currency: finalCurrency,
+        currencyDisplay: "narrowSymbol", // no "US$", just "$"
         minimumFractionDigits: 2,
     }).format(amount);
 }

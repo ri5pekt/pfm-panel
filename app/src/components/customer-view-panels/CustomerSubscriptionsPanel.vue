@@ -1,3 +1,4 @@
+<!-- CustomerSubscriptionsPanel.vue -->
 <template>
     <div class="panel subscription-panel span-2-cols">
         <h3>Subscriptions</h3>

@@ -17,7 +17,11 @@ require_once plugin_dir_path(__FILE__) . 'includes/class-pfmp-rest-orders.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-pfmp-rest-stats.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-pfmp-rest-subscriptions.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-pfmp-rest-customers.php';
+require_once plugin_dir_path(__FILE__) . 'includes/class-pfmp-rest-replacements.php';
+require_once plugin_dir_path(__FILE__) . 'includes/class-pfmp-rest-reports.php';
+
 require_once plugin_dir_path(__FILE__) . 'includes/class-pfmp-admin.php';
+
 
 register_activation_hook(__FILE__, ['PFMP_Admin', 'register_roles']);
 

@@ -1,4 +1,3 @@
-
 <!-- OrderFiltersPanel.vue -->
 <template>
     <n-space class="filters" align="end" wrap>
@@ -50,9 +49,9 @@
                     clearable
                     style="width: 130px"
                 />
-                <div v-if="filters.search_type" style="display: flex; gap: 6px;">
+                <div v-if="filters.search_type" style="display: flex; gap: 6px">
                     <n-input
-                        v-model:value="filters.search_value"
+                        v-model:value="searchInput"
                         placeholder="Enter value"
                         style="width: 150px"
                         @keyup.enter="emitSearch"
@@ -67,7 +66,7 @@
 </template>
 
 <script setup>
-import { reactive, watch } from "vue";
+import { reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import DateRangeFilter from "@/components/ui-elements/DateRangeFilter.vue";
 
@@ -86,9 +85,9 @@ const emit = defineEmits(["update:modelValue", "search"]);
 
 // Clone incoming props
 const filters = props.modelValue;
+const searchInput = ref(filters.search_value ?? "");
 
 const { showStatus, showTags, showWarehouse, showExportStatus, showAddrStatus, showDate, showSearch } = props;
-
 
 const route = useRoute();
 const router = useRouter();
@@ -100,6 +99,9 @@ function handleDateRange(range) {
 }
 
 function emitSearch() {
+    // Only push the value to parent on explicit search
+    filters.search_value = (searchInput.value ?? "").trim();
+    emit("update:modelValue", { ...filters });
     emit("search", { ...filters });
 }
 
@@ -162,6 +164,8 @@ watch(
     () => filters.search_type,
     (newVal, oldVal) => {
         if (newVal === null && oldVal !== null) {
+            // Reset both local and parent when type cleared
+            searchInput.value = "";
             filters.search_value = null;
             emit("update:modelValue", { ...filters });
             emit("search", { ...filters });
@@ -179,6 +183,7 @@ function resetFilters() {
     filters.date_to = null;
     filters.search_type = null;
     filters.search_value = null;
+    searchInput.value = "";
     emit("update:modelValue", { ...filters });
     emit("search", { ...filters });
 }

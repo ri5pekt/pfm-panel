@@ -3,8 +3,16 @@
     <div class="order-view">
         <div class="page-top">
             <n-button @click="router.back()">← Back to Orders</n-button>
-            <div class="page-title">Order #{{ props.id }}</div>
-            
+            <div class="page-title">
+                Order #{{ props.id }}
+                <n-tag v-if="isArchived" type="warning" size="small" style="margin-left: 8px; vertical-align: middle">
+                    Archived
+                </n-tag>
+            </div>
+            <div class="buttons-top">
+                <n-button @click="createReplacement">Create replacement</n-button>
+                <n-button v-if="!isArchived" @click="resendEmail('processing')"> Resend order email </n-button>
+            </div>
         </div>
         <div class="order-grid">
             <!-- Order Info Panel -->
@@ -13,13 +21,15 @@
                 :loading="loadingOrder"
                 @update-order="handleOrderUpdate"
                 :getMeta="getMeta"
+                :isArchived="isArchived"
             />
 
             <!-- Order Notes Panel -->
-            <OrderNotesPanel :orderId="props.id" :refreshKey="notesRefreshKey" />
+            <OrderNotesPanel v-if="!isArchived" :orderId="props.id" :refreshKey="notesRefreshKey" />
 
             <!-- Order Totals Panel -->
             <OrderTotalsPanel
+                v-if="!isArchived"
                 :order="order"
                 :orderId="props.id"
                 :loading="loadingOrder"
@@ -27,10 +37,16 @@
             />
 
             <!-- Past Orders Panel -->
-            <PastOrdersPanel :customerId="customerId" :excludeOrderId="Number(props.id)" :key="order?.id" />
+            <PastOrdersPanel
+                v-if="!isArchived"
+                :customerId="customerId"
+                :excludeOrderId="Number(props.id)"
+                :key="order?.id"
+            />
 
             <!-- Warehouse Export Panel -->
             <WarehouseExportPanel
+                v-if="!isArchived"
                 :loading="loadingOrder"
                 :getMeta="getMeta"
                 :trackingNumber="trackingNumber"
@@ -39,7 +55,7 @@
             />
 
             <!-- Subscriptions Panel -->
-            <SubscriptionPanel :branch="order?.subscription_branch" />
+            <SubscriptionPanel v-if="!isArchived" :branch="order?.subscription_branch" />
         </div>
     </div>
 </template>
@@ -64,9 +80,13 @@ const props = defineProps({
 
 const orderId = computed(() => props.id);
 
-const { order, loadingOrder, fetchOrder, formattedCreatedDate, getMeta, trackingNumber } = useOrder(orderId);
+const { order, loadingOrder, fetchOrder, createReplacement, resendEmail, getMeta, trackingNumber } = useOrder(orderId);
 
 const customerId = computed(() => order.value?.customer_id || null);
+
+const isArchived = computed(() => {
+    return route.query.is_archived === "1" || route.query.is_archived === "true";
+});
 
 const notesRefreshKey = ref(0);
 function refreshNotes() {

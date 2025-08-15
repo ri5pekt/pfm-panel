@@ -4,7 +4,7 @@
 $page-padding: 2rem;
 $panel-radius: 6px;
 $panel-bg: #fff;
-$border-color: #0077B6;
+$border-color: #0077b6;
 $text-muted: #555;
 $shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 
@@ -12,10 +12,10 @@ body {
     background: #f0f0f1;
 }
 :root {
-    --text-color-regular: #023E8A;
-    --text-color-special: #0077B6;
-    --text-color-link: #0096C7;
-    --text-color-muted: #0077B6;
+    --text-color-regular: #023e8a;
+    --text-color-special: #0077b6;
+    --text-color-link: #0096c7;
+    --text-color-muted: #0077b6;
     --color-muted: #b3c1d4;
 }
 
@@ -34,7 +34,7 @@ body {
     }
     .n-data-table .n-data-table-td {
         color: var(--text-color-regular);
-    }   
+    }
 
     .n-text {
         color: var(--text-color-muted);
@@ -49,6 +49,9 @@ body {
     }
 }
 
+.orders-table {
+    margin-top: 1rem;
+}
 
 .top-bar {
     position: relative;
@@ -59,6 +62,7 @@ body {
         transform: translateY(-50%);
     }
 }
+
 .top-tabs {
     margin-bottom: 20px;
 }
@@ -80,6 +84,14 @@ body {
     display: flex;
     align-items: center;
     gap: 24px;
+
+    .buttons-top {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        justify-content: flex-end;
+    }
 }
 
 .order-view {
@@ -89,6 +101,17 @@ body {
 .order-grid {
     display: grid;
     grid-template-columns: 1fr 1fr 1.4fr;
+    gap: 1.5rem;
+    margin-top: 2rem;
+
+    .span-2-cols {
+        grid-column: span 2;
+    }
+}
+
+.reports-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
     gap: 1.5rem;
     margin-top: 2rem;
 
@@ -111,7 +134,7 @@ body {
 .customer-grid {
     display: grid;
     gap: 1.5rem;
-    grid-template-columns: 1fr 1fr 1.4fr;
+    grid-template-columns: 1fr 1fr 1fr;
     grid-auto-rows: min-content;
     margin-top: 2rem;
 }
@@ -146,22 +169,22 @@ body {
     }
 
     &:nth-child(5n + 1) h3 {
-        background: #023E8A; 
+        background: #023e8a;
     }
 
     &:nth-child(5n + 2) h3 {
-        background: #0077B6;
+        background: #0077b6;
     }
 
     &:nth-child(5n + 3) h3 {
-        background: #0096C7;
+        background: #0096c7;
     }
 
     &:nth-child(5n + 4) h3 {
-        background: #0077B6;
+        background: #0077b6;
     }
     &:nth-child(5n + 5) h3 {
-        background: #023E8A; 
+        background: #023e8a;
     }
 }
 
@@ -178,6 +201,11 @@ body {
     padding-right: 0.5rem;
 }
 
+.report-list {
+    max-height: 350px;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+}
 .past-orders-scroll {
     max-height: 450px;
     overflow-y: auto;
@@ -259,9 +287,14 @@ body {
             font-size: 14px;
             font-weight: bold;
             margin-bottom: 8px;
+            white-space: nowrap;
+        }
+        .n-button--tiny-type {
+            margin-bottom: 8px;
         }
 
-        .n-input {
+        .n-input,
+        .n-select {
             margin-bottom: 8px;
             width: 100%;
         }
@@ -363,7 +396,7 @@ body {
         font-weight: 500;
         display: inline-block;
         text-transform: capitalize;
-
+        white-space: nowrap;
         &.processing {
             background: #d1fae5;
             color: #065f46;
@@ -459,8 +492,10 @@ body {
     padding: 2px 6px;
     font-size: 0.85rem;
     border-radius: 4px;
+    background: #9e9e9e;
     color: #fff;
     text-transform: capitalize;
+    white-space: nowrap;
 }
 
 .warehouse-export-pending {
@@ -484,16 +519,20 @@ body {
     background: #0c5b36;
 }
 
-.warehouse-shipbob.warehouse-export-exported {
+.warehouse-shipbob.warehouse-export-exported,
+.warehouse-shipbob.warehouse-export-shipped {
     background: #0073aa;
 }
-.warehouse-fulfillrite.warehouse-export-exported {
+.warehouse-fulfillrite.warehouse-export-exported,
+.warehouse-fulfillrite.warehouse-export-shipped {
     background: #e70358;
 }
-.warehouse-klbglobal.warehouse-export-exported {
+.warehouse-klbglobal.warehouse-export-exported,
+.warehouse-klbglobal.warehouse-export-shipped {
     background: #e66e50;
 }
-.warehouse-green.warehouse-export-exported {
+.warehouse-green.warehouse-export-exported,
+.warehouse-green.warehouse-export-shipped {
     background: #009688;
 }
 
@@ -647,9 +686,18 @@ body {
     }
 }
 
-.general-info-panel {
+.general-info-panel,
+.customer-info-panel {
     p {
         margin: 0.5rem 0;
+    }
+    .address-columns {
+        p {
+            margin: 0.25rem 0;
+        }
+        strong + p {
+            margin-top: 0rem;
+        }
     }
 }
 
@@ -685,5 +733,213 @@ body {
 
     .address-section {
         flex: 1;
+    }
+}
+
+.timeline-list {
+    margin-top: 1rem;
+    padding-left: 0;
+    list-style: none;
+}
+.timeline-entry {
+    margin-top: 1rem;
+
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    small {
+        border-right: 2px solid var(--color-muted);
+        padding-right: 8px;
+    }
+}
+
+.cols {
+    display: flex;
+    gap: 32px;
+    .col {
+        flex: 1;
+    }
+}
+
+.order-popover {
+    font-size: 13px;
+    min-width: 280px;
+    min-height: 100px;
+
+    .loader {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .error,
+    .empty {
+        padding: 10px;
+        font-size: 13px;
+        color: #888;
+    }
+
+    .products-table {
+        width: 100%;
+        border-collapse: collapse;
+
+        th,
+        td {
+            text-align: left;
+            padding: 8px 6px;
+            vertical-align: middle;
+        }
+
+        th {
+            font-weight: 600;
+            font-size: 12px;
+            color: #666;
+            border-bottom: 1px solid #ddd;
+        }
+
+        td.quantity,
+        td.price {
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .product-cell {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .product-image {
+            width: 36px;
+            height: 36px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+
+        .title {
+            margin: 0;
+            font-size: 13px;
+            color: #333;
+        }
+    }
+}
+
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+    opacity: 0;
+    transform: translateY(6px);
+}
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+    transition: opacity 180ms ease, transform 180ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+    .fade-slide-enter-active,
+    .fade-slide-leave-active {
+        transition: none;
+    }
+}
+
+.fade-scale-enter-from,
+.fade-scale-leave-to {
+    opacity: 0;
+    transform: scale(0.985);
+}
+.fade-scale-enter-active,
+.fade-scale-leave-active {
+    transition: opacity 160ms ease, transform 160ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+    .fade-scale-enter-active,
+    .fade-scale-leave-active {
+        transition: none;
+    }
+}
+
+.fade-through-enter-from {
+    opacity: 0;
+    transform: scale(1.01);
+}
+.fade-through-leave-to {
+    opacity: 0;
+    transform: scale(0.99);
+}
+.fade-through-enter-active,
+.fade-through-leave-active {
+    transition: opacity 180ms ease, transform 180ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+    .fade-through-enter-active,
+    .fade-through-leave-active {
+        transition: none;
+    }
+}
+
+.slide-left-enter-from,
+.slide-left-leave-to {
+    opacity: 0;
+    transform: translateX(12px);
+}
+.slide-left-enter-active,
+.slide-left-leave-active {
+    transition: opacity 180ms ease, transform 180ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+    .slide-left-enter-active,
+    .slide-left-leave-active {
+        transition: none;
+    }
+}
+
+.slide-right-enter-from,
+.slide-right-leave-to {
+    opacity: 0;
+    transform: translateX(-12px);
+}
+.slide-right-enter-active,
+.slide-right-leave-active {
+    transition: opacity 180ms ease, transform 180ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+    .slide-right-enter-active,
+    .slide-right-leave-active {
+        transition: none;
+    }
+}
+
+/* Respect user's reduced-motion prefs */
+@media (prefers-reduced-motion: reduce) {
+    .fade-slide-enter-active,
+    .fade-slide-leave-active {
+        transition: none !important;
+    }
+}
+
+.orders-table-scroll {
+    width: 100%;
+    overflow-x: auto;
+
+    // This keeps the table from shrinking awkwardly on mobile
+    .n-data-table {
+        min-width: 900px; // adjust based on your column count
+    }
+
+    // Optional: smoother scroll on iOS
+    -webkit-overflow-scrolling: touch;
+
+    white-space: nowrap; // Prevents text wrapping
+}
+@media only screen and (max-width: 950px) {
+    #pfm-panel-app {
+        padding: 2rem 0.5rem;
+    }
+    .top-bar {
+        .greeting {
+            transform: none;
+            top: -20px;
+            right: auto;
+            left: 0;
+        }
     }
 }

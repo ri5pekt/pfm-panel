@@ -10,21 +10,14 @@
                 :pagination="false"
                 :bordered="true"
                 :row-props="rowProps"
-                @row-click="handleRowClick"
             />
         </n-spin>
-        <n-pagination
-            v-model:page="page"
-            :page-count="totalPages"
-            :page-size="perPage"
-            style="margin-top: 1rem"
-            @update:page="fetchCustomers"
-        />
+        <n-pagination v-model:page="page" :page-count="totalPages" :page-size="perPage" style="margin-top: 1rem" />
     </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch, computed } from "vue";
+import { ref, onMounted, watch, computed, h } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { request } from "@/utils/api";
 import CustomerFiltersPanel from "@/components/ui-elements/CustomerFiltersPanel.vue";
@@ -78,8 +71,15 @@ watch(
     { deep: true }
 );
 
+// columns: make Name plain text again
 const columns = computed(() => [
-    { title: "Name", key: "name" },
+    {
+        title: "Name",
+        key: "name",
+        render(row) {
+            return row.name || "(No name)";
+        },
+    },
     { title: "Email", key: "email" },
     { title: "Orders", key: "orders_count" },
     { title: "Last Order Date", key: "last_order_date" },
@@ -89,13 +89,30 @@ const columns = computed(() => [
 function rowProps(row) {
     return {
         style: { cursor: "pointer" },
-        onClick: () => handleRowClick(row),
+        onClick: (e) => openCustomer(row, e),
+        onMousedown: (e) => {
+            // middle-click support
+            if (e.button === 1) {
+                e.preventDefault();
+                openCustomer(row, e);
+            }
+        },
+        onContextmenu: (e) => {
+            e.preventDefault(); // remove if you want the browser menu
+            openCustomer(row, { ...e, metaKey: true });
+        },
     };
 }
 
-function handleRowClick(row) {
-    console.log("Row clicked:", row);
-    router.push(`/customers/${row.id}`);
+function openCustomer(row, e) {
+    const loc = { name: "customer-view", params: { id: row.id } };
+    const href = router.resolve(loc).href; // e.g. "#/customers/123"
+
+    if (e?.metaKey || e?.ctrlKey || e?.button === 1) {
+        window.open(href, "_blank", "noopener");
+    } else {
+        router.push(loc);
+    }
 }
 
 function buildPayload() {

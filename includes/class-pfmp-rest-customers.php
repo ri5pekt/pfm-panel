@@ -1,4 +1,8 @@
 <?php
+// class-pfmp-rest-customers.php
+
+use Automattic\WooCommerce\Blocks\Utils\Utils;
+
 defined('ABSPATH') || exit;
 
 class PFMP_REST_Customers {
@@ -44,6 +48,205 @@ class PFMP_REST_Customers {
                     'sanitize_callback' => 'absint',
                 ],
             ],
+        ]);
+
+
+        register_rest_route('pfm-panel/v1', '/customers/(?P<id>\d+)/assume_user', [
+            'methods'  => 'POST',
+            'callback' => [$this, 'assume_user'],
+            'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
+            'args' => [
+                'id' => [
+                    'required' => true,
+                    'sanitize_callback' => 'absint',
+                ],
+            ],
+        ]);
+
+
+        register_rest_route('pfm-panel/v1', '/customers/(?P<id>\d+)/yotpo', [
+            'methods'  => 'GET',
+            'callback' => [$this, 'get_customer_yotpo_data'],
+            'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
+            'args' => [
+                'id' => [
+                    'required' => true,
+                    'sanitize_callback' => 'absint',
+                ],
+            ],
+        ]);
+
+
+        register_rest_route('pfm-panel/v1', '/customers/(?P<id>\d+)/yotpo-adjust', [
+            'methods'             => 'POST',
+            'callback'            => [$this, 'adjust_customer_yotpo_points'],
+            'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
+            'args'                => [
+                'id' => [
+                    'required'            => true,
+                    'sanitize_callback'   => 'absint',
+                ],
+                'points' => [
+                    'required'            => true,
+                ],
+                'reason' => [
+                    'required'            => false,
+                ],
+            ],
+        ]);
+    }
+
+
+    public function adjust_customer_yotpo_points(WP_REST_Request $request) {
+        $user_id = absint($request->get_param('id'));
+        $points  = intval($request->get_param('points'));
+        $reason  = sanitize_text_field($request->get_param('reason') ?? '');
+
+        $user = get_userdata($user_id);
+        if (!$user) {
+            return new WP_Error('not_found', 'Customer not found', ['status' => 404]);
+        }
+
+        $email = $user->user_email;
+        $guid = "0n2wUSuS-MWk45Oz-2_erg";
+        $api_key = "fojr1QSLPmNiIqKgc5ChXgtt";
+
+        if (!$guid || !$api_key) {
+            return new WP_Error('yotpo_auth_error', 'Missing Yotpo API credentials', ['status' => 500]);
+        }
+
+        // Determine whether this affects total points earned
+        $apply_to_earned = $points > 0;
+
+        $payload = [
+            'customer_email'                    => $email,
+            'point_adjustment_amount'          => $points,
+            'apply_adjustment_to_points_earned' => $apply_to_earned,
+            'visible_to_customer'              => true,
+        ];
+
+        if (!empty($reason)) {
+            $payload['history_title'] = $reason;
+        }
+
+        // 🔥 Call Yotpo API
+        $response = wp_remote_post('https://loyalty.yotpo.com/api/v2/points/adjust', [
+            'headers' => [
+                'x-guid'     => $guid,
+                'x-api-key'  => $api_key,
+                'Content-Type' => 'application/json',
+            ],
+            'body'    => wp_json_encode($payload),
+            'timeout' => 15,
+        ]);
+
+        if (is_wp_error($response)) {
+            return new WP_Error('yotpo_request_error', $response->get_error_message(), ['status' => 500]);
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if ($code !== 200) {
+            return new WP_Error('yotpo_api_error', 'Yotpo API error', [
+                'status' => $code,
+                'body'   => $body,
+            ]);
+        }
+
+        return rest_ensure_response([
+            'status'  => 'success',
+            'message' => 'Points successfully adjusted',
+            'data'    => $body,
+        ]);
+    }
+
+
+    public function get_customer_yotpo_data(WP_REST_Request $request) {
+        $id = absint($request->get_param('id'));
+        $user = get_userdata($id);
+
+        if (!$user) {
+            return new WP_Error('not_found', 'Customer not found', ['status' => 404]);
+        }
+
+        $email = strtolower($user->user_email);
+        $guid = "0n2wUSuS-MWk45Oz-2_erg";
+        $api_key = "fojr1QSLPmNiIqKgc5ChXgtt";
+
+        if (!$guid || !$api_key) {
+            return new WP_Error('missing_keys', 'Yotpo credentials missing', ['status' => 500]);
+        }
+
+        $url = add_query_arg([
+            'customer_email'     => $email,
+            'with_referral_code' => 'true',
+            'with_history'       => 'true',
+        ], 'https://loyalty.yotpo.com/api/v2/customers');
+
+        $args = [
+            'headers' => [
+                'x-guid'    => $guid,
+                'x-api-key' => $api_key,
+                'Accept'    => 'application/json',
+            ],
+            'timeout' => 15,
+        ];
+
+        $response = wp_remote_get($url, $args);
+
+        if (is_wp_error($response)) {
+            return new WP_Error('api_error', $response->get_error_message(), ['status' => 502]);
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        // Extract data
+        $referral = $body['referral_link'] ?? [];
+        $history  = $body['history_items'] ?? [];
+
+        $data = [
+            'points_balance'      => $body['points_balance'] ?? 0,
+            'vip_tier'            => $body['vip_tier_name'] ?? null,
+            'vip_entry_date'      => $body['vip_tier_entry_date'] ?? null,
+            'credit_balance'      => $body['credit_balance'] ?? null,
+            'total_purchases'     => $body['total_purchases'] ?? 0,
+            'referral_code'       => $referral['code'] ?? null,
+            'referral_url'        => $referral['link'] ?? null,
+            'referrals_completed' => $referral['completed_referral_customers'] ?? [],
+            'history'             => $history,
+        ];
+
+        return rest_ensure_response($data);
+    }
+
+
+
+    public function assume_user(WP_REST_Request $request) {
+        $id = absint($request->get_param('id'));
+        $user = get_userdata($id);
+
+        if (
+            !$user ||
+            !(in_array('customer', (array)$user->roles) ||
+                in_array('subscriber', (array)$user->roles) ||
+                in_array('administrator', (array)$user->roles))
+        ) {
+            return new WP_Error('not_found', 'Customer not found', ['status' => 404]);
+        }
+
+        if (!class_exists('user_switching')) {
+            return new WP_Error('plugin_missing', 'User Switching plugin not active', ['status' => 500]);
+        }
+
+        // Generate the switch-to-user URL
+        $switch_to_user_link = user_switching::switch_to_url($user);
+        $switch_to_user_link = html_entity_decode($switch_to_user_link);
+
+        PFMP_Utils::log($switch_to_user_link);
+        return rest_ensure_response([
+            'success' => true,
+            'switch_url' => $switch_to_user_link
         ]);
     }
 
@@ -257,9 +460,8 @@ class PFMP_REST_Customers {
         $per_page = min(100, max(1, absint($request->get_param('per_page'))));
         $offset = ($page - 1) * $per_page;
 
-        // Initial user query args
+        // Basic query args
         $args = [
-            'role__in' => ['customer', 'subscriber', 'administrator'],
             'number'   => $per_page,
             'offset'   => $offset,
             'orderby'  => 'registered',
@@ -267,14 +469,13 @@ class PFMP_REST_Customers {
             'fields'   => ['ID', 'display_name', 'user_email', 'user_registered'],
         ];
 
-        // === SEARCH LOGIC ===
+        // Handle search filters
         $search_type = $request->get_param('search_type');
         $search_value = $request->get_param('search_value');
 
         if ($search_type && $search_value) {
             switch ($search_type) {
                 case 'customer_name':
-                    // Search by display name (case-insensitive)
                     $args['search'] = '*' . esc_attr($search_value) . '*';
                     $args['search_columns'] = ['display_name'];
                     break;
@@ -284,16 +485,14 @@ class PFMP_REST_Customers {
                     break;
                 case 'order_id':
                     $order = wc_get_order(absint($search_value));
-                    if ($order && $order->get_customer_id()) {
-                        $args['include'] = [$order->get_customer_id()];
-                    } else {
-                        $args['include'] = [0]; // No results
-                    }
+                    $args['include'] = $order && $order->get_customer_id()
+                        ? [$order->get_customer_id()]
+                        : [0];
                     break;
             }
         }
 
-        // === Registered Date Range ===
+        // Filter by registration date range
         $registered_from = $request->get_param('registered_from');
         $registered_to = $request->get_param('registered_to');
         if ($registered_from || $registered_to) {
@@ -312,23 +511,26 @@ class PFMP_REST_Customers {
             }
         }
 
-        // === Get initial users ===
+        // Query users
         $user_query = new WP_User_Query($args);
         $users = $user_query->get_results();
 
-        // === Last Order Date Range filter ===
-        $last_order_from = $request->get_param('last_order_from');
-        $last_order_to = $request->get_param('last_order_to');
-
         $data = [];
         foreach ($users as $user) {
+            // Get last order
             $orders = wc_get_orders([
                 'customer_id' => $user->ID,
-                'orderby' => 'date',
-                'order' => 'DESC',
-                'limit' => 1,
+                'orderby'     => 'date',
+                'order'       => 'DESC',
+                'limit'       => 1,
             ]);
-            $orders_count = count(wc_get_orders(['customer_id' => $user->ID, 'return' => 'ids']));
+
+            // Count all orders
+            $orders_count = count(wc_get_orders([
+                'customer_id' => $user->ID,
+                'return'      => 'ids',
+            ]));
+
             $last_order_date = null;
             if (!empty($orders)) {
                 $last_order = $orders[0];
@@ -336,8 +538,6 @@ class PFMP_REST_Customers {
                     $last_order_date = $last_order->get_date_created()->date('Y-m-d');
                 }
             }
-
-
 
             $data[] = [
                 'id'              => $user->ID,
@@ -349,12 +549,12 @@ class PFMP_REST_Customers {
             ];
         }
 
-        // For last_order_date filter, we need to update total count for pagination
+        // Prepare paginated response
         $total = $user_query->get_total();
-
         $response = rest_ensure_response($data);
         $response->header('X-WP-Total', $total);
         $response->header('X-WP-TotalPages', ceil($total / $per_page));
+
         return $response;
     }
 }

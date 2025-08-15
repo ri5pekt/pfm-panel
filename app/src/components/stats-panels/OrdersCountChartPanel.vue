@@ -1,3 +1,4 @@
+<!-- OrdersCountChartPanel.vue -->
 <template>
     <div class="panel orders-chart-panel">
         <h3>Orders timeline</h3>

@@ -12,6 +12,7 @@
             <CustomerInfoPanel :customer="customer" :loading="loading" @updateCustomer="fetchCustomer" />
             <PastOrdersPanel :customerId="customerId" />
             <CustomerSubscriptionsPanel :customerId="customerId" />
+            <YotpoPanel :customerId="customerId" />
         </div>
     </div>
 </template>
@@ -26,6 +27,7 @@ import { request } from "@/utils/api";
 import CustomerInfoPanel from "@/components/customer-view-panels/CustomerInfoPanel.vue";
 import PastOrdersPanel from "@/components/order-view-panels/PastOrdersPanel.vue";
 import CustomerSubscriptionsPanel from "@/components/customer-view-panels/CustomerSubscriptionsPanel.vue";
+import YotpoPanel from "@/components/customer-view-panels/YotpoPanel.vue";
 
 const route = useRoute();
 const router = useRouter();

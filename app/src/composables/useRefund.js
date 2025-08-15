@@ -1,3 +1,4 @@
+// useRefund.js
 import { ref, computed, watch } from "vue";
 import { setCurrency } from "@/utils/utils";
 import { request } from "@/utils/api";
@@ -25,10 +26,56 @@ export function useRefund({ order, orderId, emit, message, formatCurrency }) {
     const pendingRefundFees = ref([]);
     const pendingRefundShipping = ref([]);
     const refundViaBraintree = ref(true);
+    const refundReason = ref("");
+    const refundPercent = ref();
+
+    // Apply percent to all refund fields (line items, fees, shipping)
+    function applyRefundPercent() {
+        if (!refundPercent.value || refundPercent.value < 1 || refundPercent.value > 100) return;
+        const percent = refundPercent.value / 100;
+
+        // Line Items – exclude PPU
+        refundItems.value = (order.value?.line_items || [])
+            .filter((item) => {
+                const isPPU = item.meta_data?.some((m) => m.key === "is_ppu" && m.value === "yes");
+                return !isPPU;
+            })
+            .map((item) => ({
+                id: item.id,
+                //quantity: Math.floor(item.quantity * percent) || 0,
+                total: +(item.total * percent).toFixed(2),
+                tax: +(item.total_tax * percent).toFixed(2),
+                transaction_id: getTransactionId(item),
+            }));
+
+        // Fees – skip all (they’ll remain at 0)
+        refundFees.value = (order.value?.fee_lines || []).map((f) => ({
+            id: f.id,
+            total: 0,
+            tax: 0,
+        }));
+
+        // Shipping – keep included, but you can skip if needed
+        refundShipping.value = (order.value?.shipping_lines || []).map((s) => ({
+            id: s.id,
+            total: +(s.total * percent).toFixed(2),
+            tax: +(s.total_tax * percent).toFixed(2),
+        }));
+    }
+
+    // Automatically apply refund percent on input change
+    function onRefundPercentInput(val) {
+        if (!val || val < 1 || val > 100) {
+            refundPercent.value = undefined;
+            return;
+        }
+        applyRefundPercent();
+    }
 
     // ── helpers ──
     function getRefundItem(id) {
-        return refundItems.value.find((i) => i.id === id);
+        const item = refundItems.value.find((i) => i.id === id);
+        return item || { id, quantity: 0, total: 0, tax: 0 };
     }
     function getRefundFee(id) {
         return refundFees.value.find((f) => f.id === id);
@@ -109,16 +156,16 @@ export function useRefund({ order, orderId, emit, message, formatCurrency }) {
     function onRefundQuantityChange(id, item) {
         const r = getRefundItem(id);
         const q = +r.quantity || 0;
-        const unitTotal = +item.total / +item.quantity || 1;
-        const unitTax = +item.total_tax / +item.quantity || 1;
+        const unitTotal = +item.total / +item.quantity || 0;
+        const unitTax = +item.total_tax / +item.quantity || 0;
         r.total = +(unitTotal * q).toFixed(2);
         r.tax = +(unitTax * q).toFixed(2);
     }
     function onTotalOrTaxChange(id, item) {
         const r = getRefundItem(id);
         const q = +r.quantity || 0;
-        const unitTotal = +item.total / +item.quantity || 1;
-        const unitTax = +item.total_tax / +item.quantity || 1;
+        const unitTotal = +item.total / +item.quantity || 0;
+        const unitTax = +item.total_tax / +item.quantity || 0;
         const expTotal = +(unitTotal * q).toFixed(2);
         const expTax = +(unitTax * q).toFixed(2);
         if (Math.abs(r.total - expTotal) > 0.01 || Math.abs(r.tax - expTax) > 0.01) r.quantity = 0;
@@ -201,8 +248,9 @@ export function useRefund({ order, orderId, emit, message, formatCurrency }) {
                 fees: pendingRefundFees.value,
                 shipping: pendingRefundShipping.value,
                 refund_via_braintree: refundViaBraintree.value ? 1 : 0,
+                reason: refundReason.value,
             };
-
+            console.log("Refund payload:", payload);
             const res = await request({
                 url: `/orders/${orderId}/refund`,
                 method: "POST",
@@ -270,5 +318,10 @@ export function useRefund({ order, orderId, emit, message, formatCurrency }) {
         hasRefund,
         totalAvailableToRefund,
         totalTaxAmount,
+
+        refundPercent,
+        onRefundPercentInput,
+        applyRefundPercent,
+        refundReason,
     };
 }
