@@ -132,6 +132,7 @@ const exportStatusOptions = [
     { label: "Failed", value: "failed" },
     { label: "Exported", value: "exported" },
     { label: "Shipped", value: "shipped" },
+    { label: "Exception", value: "shipment_exception" },
 ];
 
 const addrStatusOptions = [
@@ -152,6 +153,7 @@ const tagFilterOptions = [
     { label: "Subscription Renewal", value: "subscription-renewal" },
     { label: "Subscription Parent", value: "subscription-parent" },
     { label: "BAS Added", value: "bas-added" },
+    { label: "Hotjar", value: "hotjar" },
 ];
 
 const searchTypeOptions = [

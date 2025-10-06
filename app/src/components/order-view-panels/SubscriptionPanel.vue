@@ -1,6 +1,6 @@
 <!-- SubscriptionPanel.vue -->
 <template>
-    <div class="panel subscription-panel span-2-cols" v-if="branch?.length">
+    <div class="panel subscription-panel" v-if="branch?.length">
         <h3>Subscription Details</h3>
         <n-data-table :columns="columns" :data="branch" :pagination="false" size="small" striped />
     </div>

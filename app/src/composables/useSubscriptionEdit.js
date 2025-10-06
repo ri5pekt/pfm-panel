@@ -202,29 +202,67 @@ export function useSubscriptionEdit({ subscription, subscriptionId, message, emi
         }
     }
 
-    // Process Renewal
-    const showProcessRenewalModal = ref(false);
-    const processingRenewal = ref(false);
+    // Generic Action Modal (supports multiple actions)
+    const showActionModal = ref(false);
+    const actionLoading = ref(false);
+    const pendingAction = ref(null); // 'process_renewal' | 'skip_next_delivery' | 'discount_next_delivery_25'
 
-    async function processRenewal() {
-        processingRenewal.value = true;
+    const actionCopy = computed(() => {
+        switch (pendingAction.value) {
+            case "process_renewal":
+                return {
+                    title: "Process Renewal",
+                    body: `Are you sure you want to process a renewal for this subscription?<br />
+               This will attempt to generate a renewal order and charge the customer.`,
+                    type: "warning",
+                };
+            case "skip_next_delivery":
+                return {
+                    title: "Skip Next Delivery",
+                    body: `Are you sure you want to skip the next delivery for this subscription?`,
+                    type: "warning",
+                };
+            case "discount_next_delivery_25":
+                return {
+                    title: "Apply 25% on Next Delivery",
+                    body: `Apply a one-time 25% discount on the next delivery?`,
+                    type: "info",
+                };
+            default:
+                return {
+                    title: "Confirm Action",
+                    body: "Are you sure you want to perform this action?",
+                    type: "info",
+                };
+        }
+    });
+
+    function openActionModal(actionKey) {
+        pendingAction.value = actionKey;
+        showActionModal.value = true;
+    }
+
+    async function confirmAction() {
+        if (!pendingAction.value) return;
+        actionLoading.value = true;
         try {
             const res = await request({
                 url: `/subscriptions/${subscriptionId}/actions`,
                 method: "POST",
-                body: { action: "process_renewal" },
+                body: { action: pendingAction.value },
             });
             if (res && res.success) {
-                message && message.success("Renewal processed successfully!");
+                message && message.success("Action completed successfully!");
                 emit && emit("update-subscription");
             } else {
-                throw new Error(res && res.message ? res.message : "Failed to process renewal");
+                throw new Error(res && res.message ? res.message : "Action failed");
             }
         } catch (e) {
-            message && message.error("Error processing renewal: " + (e.message || e));
+            message && message.error("Error: " + (e.message || e));
         } finally {
-            processingRenewal.value = false;
-            showProcessRenewalModal.value = false;
+            actionLoading.value = false;
+            showActionModal.value = false;
+            pendingAction.value = null;
         }
     }
 
@@ -267,8 +305,11 @@ export function useSubscriptionEdit({ subscription, subscriptionId, message, emi
         subtotal,
         totalTaxAmount,
         autoTaxCalc,
-        showProcessRenewalModal,
-        processingRenewal,
-        processRenewal,
+        showActionModal,
+        actionLoading,
+        pendingAction,
+        actionCopy,
+        openActionModal,
+        confirmAction,
     };
 }

@@ -3,12 +3,18 @@
     <div class="pfm-panel-app">
         <div class="top-bar">
             <n-tabs type="line" :value="currentTab" @update:value="navigate" class="top-tabs">
-                + <n-tab name="orders" :tab="renderTab('Orders', 'orders')" /> +
-                <n-tab name="subscriptions" :tab="renderTab('Subscriptions', 'subscriptions')" /> +
-                <n-tab name="customers" :tab="renderTab('Customers', 'customers')" /> +
-                <n-tab name="replacements" :tab="renderTab('Replacement Orders', 'replacements')" /> +
-                <n-tab name="stats" :tab="renderTab('Statistics', 'stats')" /> +
-                <n-tab name="reports" :tab="renderTab('Reports', 'reports')" /> +
+                <n-tab name="orders" :tab="renderTab('Orders', 'orders')" />
+                <n-tab name="subscriptions" :tab="renderTab('Subscriptions', 'subscriptions')" />
+                <n-tab name="customers" :tab="renderTab('Customers', 'customers')" />
+                <n-tab name="replacements" :tab="renderTab('Replacement Orders', 'replacements')" />
+                <n-tab name="coupons" :tab="renderTab('Coupons', 'coupons')" />
+                <n-tab name="stats" :tab="renderTab('Statistics', 'stats')" />
+                <n-tab name="reports" :tab="renderTab('Reports', 'reports')" />
+                <n-tab
+                    v-if="hasAdminRights"
+                    name="admin-activity"
+                    :tab="renderTab('Admin Activity', 'admin-activity')"
+                />
             </n-tabs>
             <div class="greeting">👋 Hello, {{ fullName }}!</div>
         </div>
@@ -24,11 +30,13 @@
 <script setup>
 import { useRouter, useRoute } from "vue-router";
 import { ref, watch, h } from "vue";
+import { can as pfmCan } from "@/utils/permissions";
 
 const router = useRouter();
 const route = useRoute();
 const fullName = window.PFMPanelData?.user?.full_name || "Admin";
 const roles = window.PFMPanelData?.user?.roles || [];
+const hasAdminRights = pfmCan("admin_rights");
 console.log("🛂 Logged-in user roles:", roles);
 
 const tabMap = {
@@ -43,6 +51,9 @@ const tabMap = {
     "replacement-view": "replacements",
     reports: "reports",
     "report-view": "reports",
+    "admin-activity": "admin-activity",
+    coupons: "coupons",
+    "coupon-view": "coupons",
 };
 
 const currentTab = ref(tabMap[route.name] || "orders");

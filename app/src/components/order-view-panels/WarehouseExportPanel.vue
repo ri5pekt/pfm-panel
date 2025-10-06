@@ -194,12 +194,26 @@ async function exportToWarehouse() {
 
         if (json.success) emit("updateOrder");
     } catch (e) {
+        const status = e?.status ? ` (HTTP ${e.status})` : "";
+        const msg =
+            (e?.body && (e.body.message || e.body.error || e.body.detail)) ||
+            e?.message ||
+            "Could not export to warehouse.";
+
         dialog.error({
-            title: "Error",
-            content: "Could not export to warehouse.",
-            positiveText: "Understood",
+            title: `Export Failed${status}`,
+            content: msg,
+            positiveText: "OK",
         });
-        console.error(e);
+
+        // Keep rich details in console for debugging
+        console.error("❌ Export failed", {
+            status: e?.status,
+            message: msg,
+            body: e?.body,
+            raw: e?.bodyText,
+            url: e?.url,
+        });
     } finally {
         exporting.value = false;
     }

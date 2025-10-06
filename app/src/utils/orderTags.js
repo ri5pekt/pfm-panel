@@ -1,3 +1,4 @@
+// particleformen/wp-content/plugins/pfm-panel/app/src/utils/orderTags.js
 import { h } from "vue";
 import { NTag } from "naive-ui";
 
@@ -15,6 +16,7 @@ export function getSpecialTags(row) {
     const hasRenewal = !!getMetaValue(row, "_subscription_renewal");
     const hasParent = !!getMetaValue(row, "_subscription_parent");
     const upsellAmount = parseFloat(getMetaValue(row, "_upsell_amount")) || 0;
+    const hotjarUrl = getMetaValue(row, "_hotjar_last_recording_url") || null;
 
     function makeTag(label, bgColor, options = {}) {
         const {
@@ -43,7 +45,7 @@ export function getSpecialTags(row) {
                     lineHeight,
                     boxShadow: "none",
                     fontWeight,
-                    whiteSpace: "nowrap"
+                    whiteSpace: "nowrap",
                 },
             },
             { default: () => label }
@@ -60,7 +62,7 @@ export function getSpecialTags(row) {
     if (row.refunded_amount && parseFloat(row.refunded_amount) > 0) {
         tags.push(makeTag("Refunded", "#d47e78"));
     }
-
+    if (hotjarUrl) tags.push(makeTag("Hotjar", "#d23201"));
 
     const couponMap = row.coupon_codes;
     if (couponMap && typeof couponMap === "object") {

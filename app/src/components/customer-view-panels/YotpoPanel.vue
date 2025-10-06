@@ -1,16 +1,21 @@
 <!-- customer-view-panels/YotpoPanel.vue -->
 <template>
     <div class="panel yotpo-panel">
-        <h3>Yotpo Loyalty</h3>
+        <h3>Yotpo {{ title }}</h3>
         <n-skeleton v-if="loading" text :repeat="6" />
 
         <div v-else-if="yotpo">
-            <div class="row" style="display: flex; gap: 24px; align-items: center; flex-wrap: wrap;">
+            <div class="row" style="display: flex; gap: 8px 24px; align-items: center; flex-wrap: wrap">
                 <p><strong>Points:</strong> {{ yotpo.points_balance }}</p>
                 <p><strong>Credit Balance:</strong> {{ yotpo.credit_balance || "—" }}</p>
                 <p><strong>Total Purchases:</strong> {{ yotpo.total_purchases }}</p>
 
-                <n-button v-if="$can('edit_loyalty')" type="primary" @click="showAdjustModal = true" class="mt-4">
+                <n-button
+                    v-if="props.source !== 'sweepstakes' && $can('edit_loyalty')"
+                    type="primary"
+                    @click="showAdjustModal = true"
+                    class="mt-4"
+                >
                     Adjust Customer's Point Balance
                 </n-button>
             </div>
@@ -55,7 +60,6 @@
                     :data="reversedHistory"
                     :pagination="false"
                     size="small"
-                    :scroll-x="800"
                     :max-height="200"
                     bordered
                 />
@@ -75,6 +79,14 @@ import { useMessage } from "naive-ui";
 
 const props = defineProps({
     customerId: Number,
+    source: {
+        type: String,
+        default: "loyalty",
+    },
+});
+
+const title = computed(() => {
+    return props.source === "sweepstakes" ? "Sweepstakes" : "Loyalty";
 });
 
 const yotpo = ref(null);
@@ -85,10 +97,9 @@ async function fetchYotpoData() {
     loading.value = true;
     try {
         const res = await request({
-            url: `/customers/${props.customerId}/yotpo`,
+            url: `/customers/${props.customerId}/yotpo?source=${props.source}`,
         });
         yotpo.value = res;
-        
     } catch (err) {
         console.error("Failed to load Yotpo data:", err);
     } finally {
@@ -100,7 +111,10 @@ watch(() => props.customerId, fetchYotpoData, { immediate: true });
 
 function formatDate(dateStr) {
     if (!dateStr) return "—";
-    return new Date(dateStr).toLocaleString();
+    return new Date(dateStr).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+    });
 }
 
 const reversedHistory = computed(() => {
@@ -147,7 +161,7 @@ async function handleAdjustPoints() {
 
     try {
         await request({
-            url: `/customers/${props.customerId}/yotpo-adjust`,
+            url: `/customers/${props.customerId}/yotpo-adjust?source=${props.source}`,
             method: "POST",
             body: {
                 points: adjustPointsValue.value,

@@ -23,6 +23,10 @@ import ReplacementOrderView from "./views/replacements/ReplacementOrderView.vue"
 import ReportsList from "./views/reports/ReportsList.vue";
 import ReportView from "./views/reports/ReportView.vue";
 
+import CouponsList from "./views/coupons/CouponsList.vue";
+
+import AdminActionsList from "./views/admin/AdminActionsList.vue";
+
 import { can } from "@/utils/permissions";
 
 import "./assets/main.css";
@@ -40,6 +44,8 @@ const routes = [
     { path: "/replacements/:id", component: ReplacementOrderView, props: true, name: "replacement-view" },
     { path: "/reports", name: "reports", component: ReportsList },
     { path: "/reports/:key", name: "report-view", component: ReportView, props: true },
+    { path: "/admin-activity", component: AdminActionsList, name: "admin-activity", meta: { requiresAdmin: true } },
+    { path: "/coupons", component: CouponsList, name: "coupons" },
 ];
 
 const router = createRouter({

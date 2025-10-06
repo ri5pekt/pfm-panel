@@ -12,14 +12,14 @@
             </template>
         </n-modal>
 
-        <n-modal v-model:show="showProcessRenewalModal" preset="dialog" type="warning" title="Process Renewal">
+        <!-- ⬇️ New generic Action Modal -->
+        <n-modal v-model:show="showActionModal" preset="dialog" :type="actionCopy.type" :title="actionCopy.title">
             <template #default>
-                Are you sure you want to process a renewal for this subscription?<br />
-                This will attempt to generate a renewal order and charge the customer.
+                <div v-html="actionCopy.body"></div>
             </template>
             <template #action>
-                <n-button ghost @click="showProcessRenewalModal = false">Cancel</n-button>
-                <n-button type="primary" :loading="processingRenewal" @click="processRenewal">Proceed</n-button>
+                <n-button ghost @click="showActionModal = false">Cancel</n-button>
+                <n-button type="primary" :loading="actionLoading" @click="confirmAction">Proceed</n-button>
             </template>
         </n-modal>
 
@@ -201,10 +201,20 @@
             <n-space size="medium" style="margin-top: 1rem" v-if="!editMode && $can('edit_subscriptions')">
                 <n-button size="medium" type="default" @click="enterEditMode"> Edit </n-button>
             </n-space>
-            <n-space size="small" style="margin-top: 1rem" v-if="!editMode && $can('edit_subscriptions')">
-                <n-button size="medium" type="default" @click="showProcessRenewalModal = true">
-                    Process Renewal
-                </n-button>
+
+            <!-- Action buttons (only when not editing and user can edit subscriptions) -->
+            <n-space vertical size="small" style="margin-top: 1rem" v-if="!editMode && $can('edit_subscriptions')">
+                <n-space>
+                    <n-button size="medium" type="default" @click="openActionModal('process_renewal')">
+                        Process Renewal
+                    </n-button>
+                    <n-button size="medium" type="default" @click="openActionModal('skip_next_delivery')">
+                        Skip Next Delivery
+                    </n-button>
+                    <n-button size="medium" type="default" @click="openActionModal('discount_next_delivery_25')">
+                        25% on Next Delivery
+                    </n-button>
+                </n-space>
             </n-space>
         </div>
     </div>
@@ -250,11 +260,12 @@ const {
     subtotal,
     totalTaxAmount,
     autoTaxCalc,
-    showProcessRenewalModal,
-    processingRenewal,
-    processRenewal,
-
-    // more helpers if needed...
+    showActionModal,
+    actionLoading,
+    pendingAction,
+    actionCopy,
+    openActionModal,
+    confirmAction,
 } = useSubscriptionEdit({
     subscription,
     subscriptionId: props.subscriptionId,

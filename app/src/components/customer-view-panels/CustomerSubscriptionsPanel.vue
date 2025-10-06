@@ -1,6 +1,6 @@
 <!-- CustomerSubscriptionsPanel.vue -->
 <template>
-    <div class="panel subscription-panel span-2-cols">
+    <div class="panel subscription-panel">
         <h3>Subscriptions</h3>
         <div class="past-orders-scroll">
             <n-data-table

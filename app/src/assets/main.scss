@@ -100,7 +100,7 @@ body {
 
 .order-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr 1.4fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 1.5rem;
     margin-top: 2rem;
 
@@ -122,7 +122,7 @@ body {
 
 .subscription-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr 1.4fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 1.5rem;
     margin-top: 2rem;
 
@@ -134,7 +134,7 @@ body {
 .customer-grid {
     display: grid;
     gap: 1.5rem;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-auto-rows: min-content;
     margin-top: 2rem;
 }
@@ -548,6 +548,9 @@ body {
 .warehouse-export-status-shipped {
     background: #2196f3;
 }
+.warehouse-export-status-exception {
+    background: #ff9800;
+}
 
 // 📬 Address Validation Tags
 .address-validation-tag {
@@ -942,4 +945,24 @@ body {
             left: 0;
         }
     }
+}
+
+.admin-actions-list {
+    .actions-list-table {
+        margin-top: 1rem;
+    }
+}
+.desc-cell {
+    display: inline-block;
+    max-width: 300px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* global tooltip rules */
+.n-tooltip {
+    max-width: 400px;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }

@@ -21,7 +21,7 @@ import OrdersToPriorityPanel from "@/components/reports-panels/OrdersToPriorityP
 import RefundsPanel from "@/components/reports-panels/RefundsPanel.vue";
 import ReportListPanel from "@/components/reports-panels/ReportListPanel.vue";
 import TaxesVerificationPanel from "@/components/reports-panels/TaxesVerificationPanel.vue";
-
+import NarvarExportPanel from "@/components/reports-panels/NarvarExportPanel.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -34,13 +34,17 @@ const reportMap = {
         title: "Orders Report for Priority",
         component: OrdersToPriorityPanel,
     },
-    "refunds": {
+    refunds: {
         title: "Refunds Report",
         component: RefundsPanel,
     },
     "taxes-verification": {
         title: "Taxes Verification Report",
         component: TaxesVerificationPanel,
+    },
+    "export-to-narvar": {
+        title: "Export Orders to Narvar",
+        component: NarvarExportPanel,
     },
 };
 

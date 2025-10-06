@@ -15,7 +15,9 @@
             <JumpToOrderPanel />
         </n-space>
 
-        <n-space vertical size="large">
+        <OrderStatusCountsPanel ref="statusPanel" @select-status="onSelectStatus" />
+
+        <n-space vertical size="large" style="width: 100%; margin-top: 18px">
             <n-spin :show="loading">
                 <div class="orders-table-scroll">
                     <n-data-table
@@ -57,6 +59,7 @@ import OrderFiltersPanel from "@/components/ui-elements/OrderFiltersPanel.vue";
 import BulkEditPanel from "@/components/ui-elements/BulkEditPanel.vue";
 import OrderPreviewPopover from "@/components/ui-elements/OrderPreviewPopover.vue";
 import JumpToOrderPanel from "@/components/ui-elements/JumpToOrderPanel.vue";
+import OrderStatusCountsPanel from "@/components/ui-elements/OrderStatusCountsPanel.vue";
 
 import { useIsMobile } from "@/composables/useIsMobile";
 
@@ -282,15 +285,20 @@ const columns = computed(() => {
                     );
                 }
 
-                // Internal system
                 const mapping = {
                     pending: "warehouse-export-status-pending",
                     failed: "warehouse-export-status-failed",
                     exported: "warehouse-export-status-exported",
                     shipped: "warehouse-export-status-shipped",
+                    shipment_exception: "warehouse-export-status-exception",
                 };
+
+                const labelMapping = {
+                    shipment_exception: "Exception",
+                };
+
                 const tagClass = mapping[status] || "warehouse-export-status-pending";
-                const label = status ? status.charAt(0).toUpperCase() + status.slice(1) : "—";
+                const label = labelMapping[status] || (status ? status.charAt(0).toUpperCase() + status.slice(1) : "—");
 
                 return h("span", { class: ["warehouse-export-status-tag", tagClass].join(" ") }, label);
             },
@@ -379,7 +387,7 @@ function rowProps(row) {
         onContextmenu: (e) => {
             e.preventDefault(); // prevent browser menu
             if (!showCheckboxes.value) {
-                openOrder(row, { ...e, metaKey: true }); 
+                openOrder(row, { ...e, metaKey: true });
             }
         },
     };
@@ -530,5 +538,13 @@ function refreshOrderTimestamps() {
         // Trick Vue into re-rendering rows by shallow-cloning
         return { ...order };
     });
+}
+
+function onSelectStatus(status) {
+    // "All" clears the filter
+    filters.status = status === "all" ? null : status;
+    // go to page 1 so URL looks like ...?status=processing&page=1
+    if (page.value !== 1) page.value = 1;
+    else fetchOrders(1); // optional: immediate fetch if you're already on page 1
 }
 </script>

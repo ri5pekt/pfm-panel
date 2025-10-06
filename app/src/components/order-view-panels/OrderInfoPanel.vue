@@ -88,6 +88,18 @@
                             </template>
                         </p>
 
+                        <!-- Hotjar recordings (if any) -->
+                        <p v-if="!props.isArchived && hotjarLinks.length">
+                            <strong>Hotjar:</strong>
+                            <span style="margin-left: 6px">
+                                <template v-for="(url, i) in hotjarLinks" :key="url">
+                                    <a :href="url" target="_blank" rel="noopener" style="text-decoration: underline">
+                                        Recording {{ i + 1 }} </a
+                                    ><span v-if="i < hotjarLinks.length - 1">, </span>
+                                </template>
+                            </span>
+                        </p>
+
                         <p v-if="!props.isArchived">
                             <strong>Chargeback Alert:</strong>
                             <template v-if="editingOrderInfo">
@@ -460,6 +472,7 @@ const replacementReasonOptions = [
     { label: "Exchange/wrong product", value: "Exchange/wrong product" },
     { label: "In lieu of refund", value: "In lieu of refund" },
     { label: "Influencer ", value: "Influencer" },
+    { label: "Amazon", value: "Amazon" },
 ];
 
 /** Braintree state */
@@ -624,6 +637,29 @@ const shippingKeys = [
     "postcode",
     "country",
 ];
+
+const hotjarLinks = computed(() => {
+    const urls = [];
+
+    // try last recording first
+    const last = props.getMeta?.("_hotjar_last_recording_url");
+    if (last) urls.push(last);
+
+    // then all recordings (array or JSON string)
+    let all = props.getMeta?.("_hotjar_recording_urls");
+    if (typeof all === "string") {
+        try {
+            all = JSON.parse(all);
+        } catch {
+            all = [];
+        }
+    }
+    if (Array.isArray(all)) {
+        for (const u of all) if (u && !urls.includes(u)) urls.push(u);
+    }
+
+    return urls;
+});
 
 watch(
     () => props.order,

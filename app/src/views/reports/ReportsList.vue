@@ -36,6 +36,11 @@ const reports = [
         title: "Taxes Verification Report",
         description: "Cross-check WooCommerce order totals and tax for verification. CSV export.",
     },
+    {
+        key: "export-to-narvar",
+        title: "Export Orders to Narvar",
+        description: "Generate a Narvar-ready export by date range or specific order IDs.",
+    },
 ];
 
 function goToReport(key) {

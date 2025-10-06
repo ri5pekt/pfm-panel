@@ -14,6 +14,7 @@
                 <n-button v-if="!isArchived" @click="resendEmail('processing')"> Resend order email </n-button>
             </div>
         </div>
+        
         <div class="order-grid">
             <!-- Order Info Panel -->
             <OrderInfoPanel
@@ -56,6 +57,8 @@
 
             <!-- Subscriptions Panel -->
             <SubscriptionPanel v-if="!isArchived" :branch="order?.subscription_branch" />
+
+            <KountPanel :loading="loadingOrder" :order="order" :getMeta="getMeta" />
         </div>
     </div>
 </template>
@@ -73,6 +76,7 @@ import PastOrdersPanel from "@/components/order-view-panels/PastOrdersPanel.vue"
 import WarehouseExportPanel from "@/components/order-view-panels/WarehouseExportPanel.vue";
 import OrderTotalsPanel from "@/components/order-view-panels/OrderTotalsPanel.vue";
 import SubscriptionPanel from "@/components/order-view-panels/SubscriptionPanel.vue";
+import KountPanel from "@/components/order-view-panels/KountPanel.vue";
 
 const props = defineProps({
     id: String,
