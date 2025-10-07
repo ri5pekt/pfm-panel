@@ -248,7 +248,7 @@ const columns = computed(() => {
                         "warehouse-export-shipstation",
                         shipstation === "yes" ? "warehouse-export-exported" : "warehouse-export-pending",
                     ];
-                    return h("span", { class: classes.join(" ") }, "Shipstation");
+                    return h("span", { class: classes.join(" ") }, "Not set");
                 }
 
                 // Internal warehouses

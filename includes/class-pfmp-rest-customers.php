@@ -6,6 +6,22 @@ use Automattic\WooCommerce\Blocks\Utils\Utils;
 defined('ABSPATH') || exit;
 
 class PFMP_REST_Customers {
+
+    private $yotpo_sources = [
+        'loyalty' => [
+            'guid' => "0n2wUSuS-MWk45Oz-2_erg",
+            'api_key' => "fojr1QSLPmNiIqKgc5ChXgtt",
+        ],
+        'sweepstakes' => [
+            'guid' => "jUdSO8kyGvLndIkCc14UQw",
+            'api_key' => "Nz8YDU9AWo8UgkVRAPad9Qtt",
+        ],
+    ];
+
+    private function get_yotpo_credentials($source) {
+        return $this->yotpo_sources[$source] ?? $this->yotpo_sources['loyalty'];
+    }
+
     public function __construct() {
         add_action('rest_api_init', [$this, 'register_rest_api']);
     }
@@ -73,6 +89,11 @@ class PFMP_REST_Customers {
                     'required' => true,
                     'sanitize_callback' => 'absint',
                 ],
+                'source' => [
+                    'required' => false,
+                    'default'  => 'loyalty',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
             ],
         ]);
 
@@ -92,6 +113,11 @@ class PFMP_REST_Customers {
                 'reason' => [
                     'required'            => false,
                 ],
+                'source' => [
+                    'required' => false,
+                    'default'  => 'loyalty',
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
             ],
         ]);
     }
@@ -101,6 +127,7 @@ class PFMP_REST_Customers {
         $user_id = absint($request->get_param('id'));
         $points  = intval($request->get_param('points'));
         $reason  = sanitize_text_field($request->get_param('reason') ?? '');
+        $source = $request->get_param('source') ?: 'loyalty';
 
         $user = get_userdata($user_id);
         if (!$user) {
@@ -108,8 +135,9 @@ class PFMP_REST_Customers {
         }
 
         $email = $user->user_email;
-        $guid = "0n2wUSuS-MWk45Oz-2_erg";
-        $api_key = "fojr1QSLPmNiIqKgc5ChXgtt";
+        $creds = $this->get_yotpo_credentials($source);
+        $guid = $creds['guid'];
+        $api_key = $creds['api_key'];
 
         if (!$guid || !$api_key) {
             return new WP_Error('yotpo_auth_error', 'Missing Yotpo API credentials', ['status' => 500]);
@@ -154,6 +182,12 @@ class PFMP_REST_Customers {
             ]);
         }
 
+        PFMP_Utils::log_admin_action(
+            'loyalty_adjust_request',
+            'customer',
+            "Yotpo points adjust for customer #{$user_id} ({$email}): {$points} points" . ($reason ? " | reason: {$reason}" : '' . " | source: {$source}"),
+        );
+
         return rest_ensure_response([
             'status'  => 'success',
             'message' => 'Points successfully adjusted',
@@ -165,14 +199,16 @@ class PFMP_REST_Customers {
     public function get_customer_yotpo_data(WP_REST_Request $request) {
         $id = absint($request->get_param('id'));
         $user = get_userdata($id);
+        $source = $request->get_param('source') ?: 'loyalty';
 
         if (!$user) {
             return new WP_Error('not_found', 'Customer not found', ['status' => 404]);
         }
 
         $email = strtolower($user->user_email);
-        $guid = "0n2wUSuS-MWk45Oz-2_erg";
-        $api_key = "fojr1QSLPmNiIqKgc5ChXgtt";
+        $creds = $this->get_yotpo_credentials($source);
+        $guid = $creds['guid'];
+        $api_key = $creds['api_key'];
 
         if (!$guid || !$api_key) {
             return new WP_Error('missing_keys', 'Yotpo credentials missing', ['status' => 500]);
@@ -243,6 +279,7 @@ class PFMP_REST_Customers {
         $switch_to_user_link = user_switching::switch_to_url($user);
         $switch_to_user_link = html_entity_decode($switch_to_user_link);
 
+        PFMP_Utils::log_admin_action('assume_user', 'customer', "Generated switch session for customer #{$id}");
         PFMP_Utils::log($switch_to_user_link);
         return rest_ensure_response([
             'success' => true,
@@ -386,6 +423,21 @@ class PFMP_REST_Customers {
         } catch (Throwable $e) {
             return new WP_Error('update_failed', $e->getMessage(), ['status' => 500]);
         }
+
+        $did_orders = !empty($params['update_all_orders']);
+        $did_subs   = !empty($params['update_all_subscriptions']);
+
+        PFMP_Utils::log_admin_action(
+            'update',
+            'customer',
+            sprintf(
+                "Updated customer #%d (fields: %s)%s%s",
+                $id,
+                $fields ? implode(', ', $fields) : 'none',
+                $did_orders ? ' | propagated to orders' : '',
+                $did_subs   ? ' | propagated to subscriptions' : ''
+            )
+        );
 
         return rest_ensure_response(['success' => true, 'fields' => $fields]);
     }
