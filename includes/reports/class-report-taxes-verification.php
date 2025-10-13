@@ -69,6 +69,7 @@ class PFMP_Report_Taxes_Verification {
                 "[Woo] Order Date",
                 "[Woo] Order ID",
                 "[Woo] Payment Method",
+                "[Woo] Payment Method ID",
                 "[Woo] Country",
                 "[Woo] Shipping State",
                 "[Woo] Total",
@@ -111,6 +112,7 @@ class PFMP_Report_Taxes_Verification {
             $country = $shipping['country'] ?? '';
 
             $woo_payment_method = $order->get_payment_method_title();
+            $woo_payment_method_id = $order->get_payment_method();
 
             if ($country !== 'US' && $country !== 'USA') {
                 // Skip non-US orders
@@ -141,6 +143,7 @@ class PFMP_Report_Taxes_Verification {
                 $woo_order_date,
                 $order->get_id(),
                 $woo_payment_method,
+                $woo_payment_method_id,
                 $country,
                 $shipping['state'] ?? '',
                 $woo_total_no_tax,

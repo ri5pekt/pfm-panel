@@ -79,6 +79,7 @@ class PFMP_REST_Replacements {
         global $wpdb;
         $table = $wpdb->prefix . 'replacement_orders';
         $wpdb->delete($table, ['id' => $id]);
+        PFMP_Utils::log_admin_action('delete', 'replacement', "Deleted replacement #{$id}");
         return rest_ensure_response(['success' => true]);
     }
 
@@ -137,6 +138,7 @@ class PFMP_REST_Replacements {
             $replacement->save();
 
             PFMP_Utils::log("✅ Replacement created: ID " . $replacement->get_id());
+            PFMP_Utils::log_admin_action('create', 'replacement', "Created replacement #{$replacement->get_id()}");
 
             return rest_ensure_response([
                 'id'         => $replacement->get_id(),
@@ -527,6 +529,11 @@ class PFMP_REST_Replacements {
             if ($new_customer_id !== $replacement->get_customer_id()) {
                 $replacement->set_customer_id($new_customer_id);
                 $replacement->add_order_note("Customer changed to {$user_display} (ID: {$new_customer_id}) by {$admin_name}.");
+                PFMP_Utils::log_admin_action(
+                    'update',
+                    'replacement',
+                    "Changed customer on replacement #{$replacement->id} to {$user_display} (ID: {$new_customer_id})"
+                );
             }
         }
 
@@ -536,6 +543,8 @@ class PFMP_REST_Replacements {
         try {
             $replacement->assign_customer_if_missing();
             $replacement->save();
+
+            PFMP_Utils::log_admin_action('update', 'replacement', "Updated replacement #{$replacement->id} (fields: " . implode(', ', $updated_fields) . ')');
 
             return rest_ensure_response([
                 'success' => true,
@@ -667,6 +676,12 @@ class PFMP_REST_Replacements {
             $replacement->assign_customer_if_missing();
             $replacement->add_note('Replacement order updated by ' . $admin_name, $current_user->ID);
             $replacement->save();
+
+            PFMP_Utils::log_admin_action(
+                'edit_items',
+                'replacement',
+                "Edited items/shipping on replacement #{$replacement->id}"
+            );
         }
 
         return rest_ensure_response([
@@ -724,6 +739,12 @@ class PFMP_REST_Replacements {
             $replacement->add_note("Replacement manually exported to {$warehouse_slug} by {$admin_name}.", $current_user->ID);
             $replacement->save();
 
+            PFMP_Utils::log_admin_action(
+                'export',
+                'replacement',
+                "Exported replacement #{$id} to warehouse '{$warehouse_slug}'"
+            );
+
             return new WP_REST_Response([
                 'success' => true,
                 'message' => 'Replacement was manually exported successfully!',
@@ -760,6 +781,12 @@ class PFMP_REST_Replacements {
                 $replacement->add_note("Address status manually forced to VALID by $admin_name.", $current_user->ID);
                 $replacement->save();
 
+                PFMP_Utils::log_admin_action(
+                    'address_force_valid',
+                    'replacement',
+                    "Forced address VALID on replacement #{$replacement_id}"
+                );
+
                 return new WP_REST_Response([
                     'success' => true,
                     'message' => 'Address status forced to VALID.',
@@ -774,6 +801,13 @@ class PFMP_REST_Replacements {
             $result = $wex_plugin->validate_order_address($replacement_id);
 
             if (!empty($result->is_valid) && $result->is_valid === 'true') {
+
+                PFMP_Utils::log_admin_action(
+                    'address_validated',
+                    'replacement',
+                    "Revalidated address on replacement #{$replacement_id}: " . (string)($result->message ?? 'OK')
+                );
+                
                 return new WP_REST_Response([
                     'success' => true,
                     'message' => $result->message,

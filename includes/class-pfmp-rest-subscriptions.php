@@ -121,25 +121,128 @@ class PFMP_REST_Subscriptions {
     }
 
     function handle_subscription_action(WP_REST_Request $request) {
-        $id = (int)$request['id'];
+        $id     = (int) $request['id'];
         $action = $request->get_param('action');
 
-        if ($action === 'process_renewal') {
-            // You would use WooCommerce Subscriptions API here:
-            $subscription = wcs_get_subscription($id);
-            if (!$subscription) {
-                return new WP_REST_Response(['success' => false, 'message' => 'Subscription not found'], 404);
-            }
-            try {
-                // This triggers a renewal
-                $order = wcs_create_renewal_order($subscription);
-                return new WP_REST_Response(['success' => true, 'order_id' => $order ? $order->get_id() : null]);
-            } catch (Exception $e) {
-                return new WP_REST_Response(['success' => false, 'message' => $e->getMessage()], 400);
-            }
+        $subscription = wcs_get_subscription($id);
+        if (!$subscription) {
+            return new WP_REST_Response(['success' => false, 'message' => 'Subscription not found'], 404);
         }
-        return new WP_REST_Response(['success' => false, 'message' => 'Unknown action'], 400);
+
+        $current_user = wp_get_current_user();
+        $admin_name   = $current_user && $current_user->exists() ? $current_user->display_name : 'Admin';
+
+        try {
+            switch ($action) {
+                case 'process_renewal': {
+                        // same as before, but with logging
+                        $order = wcs_create_renewal_order($subscription);
+
+                        PFMP_Utils::log_admin_action(
+                            'action',
+                            'subscription',
+                            sprintf(
+                                "Processed '%s' for subscription #%d by %s%s",
+                                $action,
+                                $id,
+                                $admin_name,
+                                ($order && $order->get_id()) ? " | renewal order #" . $order->get_id() : ""
+                            )
+                        );
+
+                        return new WP_REST_Response([
+                            'success'  => true,
+                            'order_id' => $order ? $order->get_id() : null,
+                        ]);
+                    }
+
+                case 'skip_next_delivery': {
+                        // ⏭ Skip next payment/delivery: advance next_payment by one interval/period
+                        $current_next = $subscription->get_time('next_payment');
+                        if (!$current_next) {
+                            return new WP_REST_Response([
+                                'success' => false,
+                                'message' => 'No next payment date to skip.',
+                            ], 400);
+                        }
+
+                        $interval = (int) $subscription->get_billing_interval();
+                        $period   = (string) $subscription->get_billing_period(); // day|week|month|year
+
+                        $new_next_ts = wcs_add_time($interval, $period, $current_next);
+                        $new_next_gm = gmdate('Y-m-d H:i:s', $new_next_ts);
+
+                        $subscription->update_dates(['next_payment' => $new_next_gm]);
+                        $subscription->add_order_note(sprintf('Next payment skipped by admin (%s). New date: %s', $admin_name, $new_next_gm));
+                        $subscription->save();
+
+                        PFMP_Utils::log_admin_action(
+                            'action',
+                            'subscription',
+                            sprintf("Processed '%s' for subscription #%d by %s | next_payment => %s", $action, $id, $admin_name, $new_next_gm)
+                        );
+
+                        return new WP_REST_Response([
+                            'success'           => true,
+                            'next_payment_date' => $new_next_gm,
+                        ]);
+                    }
+
+                case 'discount_next_delivery_25': {
+                        // 🏷️ One-time 25% discount on the next renewal (mirrors your utils logic)
+                        $already_set  = $subscription->get_meta('_discount_next_order') == '1';
+                        $already_used = $subscription->get_meta('_discount_used') == '1';
+
+                        if ($already_set || $already_used) {
+                            return new WP_REST_Response([
+                                'success' => false,
+                                'message' => 'Discount already applied or used for this subscription.',
+                            ], 400);
+                        }
+
+                        $discount_percent = 25;
+
+                        foreach ($subscription->get_items() as $item) {
+                            $original = $item->get_subtotal(); // current per-item subtotal
+                            // keep the original baseline for restoring later (you already restore on renewal complete)
+                            $item->add_meta_data('_original_price', $original, true);
+
+                            $discounted = $original - ($original * ($discount_percent / 100));
+                            $item->set_subtotal($discounted);
+                            $item->set_total($discounted);
+                            // (taxes will be recomputed via calculate_totals)
+                        }
+
+                        // flag discount state
+                        $subscription->update_meta_data('_discount_next_order', '1');
+                        $subscription->update_meta_data('_discount_percent', $discount_percent);
+                        $subscription->update_meta_data('_discount_used', '0');
+
+                        $subscription->add_order_note(sprintf('A %d%% discount has been applied to the next delivery by admin (%s).', $discount_percent, $admin_name));
+                        $subscription->calculate_totals(); // ensure totals reflect new line totals/taxes
+                        $subscription->save();
+
+                        PFMP_Utils::log_admin_action(
+                            'action',
+                            'subscription',
+                            sprintf("Processed '%s' for subscription #%d by %s | %d%% applied to next delivery", $action, $id, $admin_name, $discount_percent)
+                        );
+
+                        return new WP_REST_Response([
+                            'success' => true,
+                            'message' => '25% discount applied to next delivery.',
+                        ]);
+                    }
+
+                default:
+                    return new WP_REST_Response(['success' => false, 'message' => 'Unknown action'], 400);
+            }
+        } catch (Exception $e) {
+            return new WP_REST_Response(['success' => false, 'message' => $e->getMessage()], 400);
+        }
     }
+
+
 
     public function edit_subscription_items(WP_REST_Request $request) {
         $id = absint($request['id']);
@@ -319,6 +422,23 @@ class PFMP_REST_Subscriptions {
                 $sub->save();
             }
         }
+
+        $cnt_updated = is_array($params['items'] ?? null) ? count(array_filter($params['items'], fn($i) => !empty($i['id']))) : 0;
+        $cnt_added   = is_array($params['new_items'] ?? null) ? count($params['new_items']) : 0;
+        $cnt_removed = is_array($params['removed_items'] ?? null) ? count($params['removed_items']) : 0;
+
+        PFMP_Utils::log_admin_action(
+            'edit_items',
+            'subscription',
+            sprintf(
+                "Edited items for subscription #%d (updated:%d, added:%d, removed:%d, auto_tax:%s)",
+                $id,
+                $cnt_updated,
+                $cnt_added,
+                $cnt_removed,
+                (!isset($params['auto_tax']) || $params['auto_tax']) ? 'yes' : 'no'
+            )
+        );
 
         return rest_ensure_response([
             'success' => true,
@@ -529,6 +649,18 @@ class PFMP_REST_Subscriptions {
                 }
                 $sub->add_order_note($note);
                 $sub->save();
+
+                PFMP_Utils::log_admin_action(
+                    'update',
+                    'subscription',
+                    sprintf(
+                        "Updated subscription #%d (fields: %s)%s%s",
+                        $id,
+                        $updated_fields ? implode(', ', $updated_fields) : 'none',
+                        $updated_profile ? ' | updated customer profile' : '',
+                        !empty($params['update_all_subscriptions']) ? ' | propagated to all user subscriptions' : ''
+                    )
+                );
             }
 
             return rest_ensure_response(['success' => true, 'subscription_id' => $id]);

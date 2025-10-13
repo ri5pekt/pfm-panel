@@ -1,5 +1,5 @@
 <?php
-
+// class-pfmp-utils.php
 defined('ABSPATH') || exit;
 
 class PFMP_Utils {
@@ -71,5 +71,59 @@ class PFMP_Utils {
         ]);
         */
         return $result;
+    }
+
+
+    public static function log_admin_action($action_type, $resource_type, $description) {
+        // Table name (you chose no prefix)
+        $table = 'pfm_admin_actions';
+
+        // Resolve current user (falls back to "System")
+        $user = function_exists('wp_get_current_user') ? wp_get_current_user() : null;
+        $admin_id   = ($user && isset($user->ID)) ? (int) $user->ID : 0;
+        $admin_name = ($user && method_exists($user, 'exists') && $user->exists())
+            ? ($user->display_name ?: 'Unknown')
+            : 'System';
+
+        // Sanitize inputs
+        $action_type   = sanitize_key($action_type);
+        $resource_type = sanitize_key($resource_type);
+        $description   = wp_strip_all_tags((string) $description);
+
+        global $wpdb;
+
+        // Quick existence check once per request (optional but helpful)
+        static $table_checked = false;
+        if (!$table_checked) {
+            $maybe = $wpdb->get_var($wpdb->prepare(
+                "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s",
+                $table
+            ));
+            $table_checked = true;
+            if (!$maybe) {
+                // Avoid fataling if table isn't there yet
+                error_log("[pfm_admin_actions] Table missing. Skipping log for {$action_type}/{$resource_type}.");
+                return false;
+            }
+        }
+
+        $data = [
+            'created_at'    => current_time('mysql'),
+            'admin_id'      => $admin_id,
+            'admin_name'    => $admin_name,
+            'action_type'   => $action_type,
+            'resource_type' => $resource_type,
+            'description'   => $description,
+        ];
+        $formats = ['%s', '%d', '%s', '%s', '%s', '%s'];
+
+        $ok = $wpdb->insert($table, $data, $formats);
+
+        if ($ok === false) {
+            // Don’t throw in runtime paths—just log
+            error_log('[pfm_admin_actions] Insert failed: ' . $wpdb->last_error);
+            return false;
+        }
+        return (int) $wpdb->insert_id;
     }
 }

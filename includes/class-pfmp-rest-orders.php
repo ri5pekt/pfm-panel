@@ -143,6 +143,28 @@ class PFMP_REST_Orders {
                 'type' => ['sanitize_callback' => 'sanitize_text_field'], // processing | completed | invoice
             ],
         ]);
+
+
+        register_rest_route('pfm-panel/v1', '/orders/status-counts', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_order_status_counts'],
+            'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
+        ]);
+    }
+
+
+    public function get_order_status_counts(WP_REST_Request $request) {
+        $statuses = wc_get_order_statuses();
+        $counts   = [];
+
+        foreach ($statuses as $status_key => $label) {
+            $status = str_replace('wc-', '', $status_key);
+            $counts[$status] = wc_orders_count($status);
+        }
+
+        $counts['all'] = array_sum($counts);
+
+        return rest_ensure_response($counts);
     }
 
 
@@ -239,6 +261,7 @@ class PFMP_REST_Orders {
                 $admin_name
             ));
             $order->save();
+            PFMP_Utils::log_admin_action('email_resend', 'order', "Resent '{$email_id}' email for order #{$order_id}");
 
             return rest_ensure_response(['success' => true, 'email_id' => $email_id]);
         } catch (Throwable $e) {
@@ -517,6 +540,8 @@ class PFMP_REST_Orders {
 
         $order = wc_get_order($order_id);
         $order->add_order_note('Order restored from archive by ' . $admin_name);
+
+        PFMP_Utils::log_admin_action('restore', 'order', "Restored order #{$order_id} from archive");
 
         return rest_ensure_response(['success' => true]);
     }
@@ -866,7 +891,7 @@ class PFMP_REST_Orders {
                     'postcode' => $order->get_billing_postcode(),
                     'city'     => $order->get_billing_city(),
                 ];
-                
+
                 $order->calculate_taxes($billing);
                 $order->calculate_totals(false);
                 $order->save();
@@ -924,6 +949,8 @@ class PFMP_REST_Orders {
 
                 $order->set_total($order_total);
                 $order->save();
+
+                PFMP_Utils::log_admin_action('edit_items', 'order', "Edited items/fees/shipping on order #{$order_id}");
             }
         }
 
@@ -955,6 +982,8 @@ class PFMP_REST_Orders {
                 $order->set_status($value);
                 $order->add_order_note("Status changed to '$value' by $admin_name via bulk action.");
                 $order->save();
+                PFMP_Utils::log_admin_action('bulk_update', 'order', "Changed status of order #{$id} to '{$value}'");
+
                 $results[] = $id;
             }
 
@@ -973,6 +1002,8 @@ class PFMP_REST_Orders {
                     $order->update_meta_data('warehouse_export_status', 'exported');
                     $order->add_order_note("Bulk-exported to {$warehouse_slug} by $admin_name.");
                     $order->save();
+
+                    PFMP_Utils::log_admin_action('bulk_export', 'order', "Exported order #{$id} to warehouse '{$warehouse_slug}'");
                 }
             }
         }
@@ -1030,6 +1061,9 @@ class PFMP_REST_Orders {
             $order->add_order_note($note);
             $order->save();
 
+            PFMP_Utils::log_admin_action('export', 'order', "Exported order #{$order_id} to warehouse '{$warehouse_slug}'");
+
+
             return new WP_REST_Response([
                 'success' => true,
                 'message' => 'Order was manually exported successfully!',
@@ -1071,6 +1105,7 @@ class PFMP_REST_Orders {
             $order->update_meta_data('validate_address_status', 'valid');
             $order->add_order_note(__("Address status manually forced to VALID by $admin_name.", 'warehouse-export'));
             $order->save();
+            PFMP_Utils::log_admin_action('address_force_valid', 'order', "Forced address VALID on order #{$order_id}");
 
 
             return new WP_REST_Response(['success' => true, 'message' => 'Address status forced to VALID.']);
@@ -1089,6 +1124,7 @@ class PFMP_REST_Orders {
 
 
         if ($result->is_valid === 'true') {
+            PFMP_Utils::log_admin_action('address_validated', 'order', "Address validated on order #{$order_id}");
 
             return new WP_REST_Response(['success' => true, 'message' => $result->message]);
         }
@@ -1335,6 +1371,9 @@ class PFMP_REST_Orders {
                 PFMP_Utils::log("💰 WC refund amount (snapped): " . $refund_data['amount']);
 
                 $refund = wc_create_refund($refund_data);
+
+                PFMP_Utils::log_admin_action('refund', 'order', "Created refund #{$refund->get_id()} on order #{$order_id} ({$refund_data['amount']})");
+
                 if (!is_wp_error($refund)) {
                     $refund->set_reason($refund_data['refund_reason']);
                     $refund->save();
@@ -1424,6 +1463,7 @@ class PFMP_REST_Orders {
                 ));
                 $order->update_meta_data('_braintree_refund_id', $refund_id);
                 $order->save();
+                PFMP_Utils::log_admin_action('refund_gateway', 'order', "Braintree refund for order #{$order->get_id()} | tx {$transaction_id} | amount {$amount}");
 
                 return true;
             } else {
@@ -1443,6 +1483,47 @@ class PFMP_REST_Orders {
     public function get_orders_by_user_id(WP_REST_Request $request) {
         global $wpdb;
 
+        // --- Helpers ---
+        $aggregate_items = function (array $rows) {
+            $map = [];
+            foreach ($rows as $r) {
+                $name = (string)($r['name'] ?? '');
+                $qty  = (int)($r['qty'] ?? 1);
+
+                if (!isset($map[$name])) {
+                    $map[$name] = ['name' => $name, 'qty' => $qty];
+                } else {
+                    $map[$name]['qty'] += $qty;
+                }
+            }
+            return array_values(array_filter($map, fn($it) => $it['qty'] > 0));
+        };
+
+        $get_wc_order_items = function (WC_Order $order) use ($aggregate_items) {
+            $rows = [];
+            foreach ($order->get_items('line_item') as $item) {
+                $rows[] = [
+                    'name' => (string) $item->get_name(),
+                    'qty'  => (int) $item->get_quantity(),
+                ];
+            }
+            return $aggregate_items($rows);
+        };
+
+        $get_replacement_items = function ($rep_items) use ($aggregate_items) {
+            $rows = [];
+            if (is_array($rep_items)) {
+                foreach ($rep_items as $it) {
+                    $rows[] = [
+                        'name' => (string) ($it['name'] ?? $it['product_name'] ?? $it['title'] ?? ''),
+                        'qty'  => (int)    ($it['qty'] ?? $it['quantity'] ?? 1),
+                    ];
+                }
+            }
+            return $aggregate_items($rows);
+        };
+
+        // --- Validate ---
         $user_id  = absint($request['user_id']);
         if (!$user_id) {
             return new WP_Error('invalid_user', 'Invalid user ID.', ['status' => 400]);
@@ -1452,7 +1533,7 @@ class PFMP_REST_Orders {
         $page     = absint($request->get_param('page')) ?: 1;
         $offset   = ($page - 1) * $per_page;
 
-        // ---- 1) LIVE Woo orders (unchanged) ----
+        // --- 1) Live Woo orders ---
         $live_orders = [];
         try {
             $orders = wc_get_orders([
@@ -1463,65 +1544,79 @@ class PFMP_REST_Orders {
                 'order'       => 'DESC',
                 'status'      => array_keys(wc_get_order_statuses())
             ]);
+
             foreach ($orders as $order) {
+                /** @var WC_Order $order */
                 $disputed_amount = (float) $order->get_meta('disputed_amount');
+                $has_parent      = (bool) $order->get_meta('_subscription_parent');
+                $has_renewal     = (bool) $order->get_meta('_subscription_renewal');
+
                 $live_orders[] = [
-                    'id'            => $order->get_id(),
-                    'status'        => $order->get_status(),
-                    'total'         => (float) $order->get_total(),
-                    'currency'      => $order->get_currency(),
-                    'date_created'  => $order->get_date_created() ? $order->get_date_created()->date('Y-m-d H:i:s') : null,
-                    'is_archived'   => false,
-                    'is_replacement' => false,
-                    'has_chargeback' => $disputed_amount > 0,
-                    'source'        => 'woo',
+                    'id'                      => $order->get_id(),
+                    'status'                  => $order->get_status(),
+                    'total'                   => (float) $order->get_total(),
+                    'currency'                => $order->get_currency(),
+                    'date_created'            => $order->get_date_created() ? $order->get_date_created()->date('Y-m-d H:i:s') : null,
+                    'is_archived'             => false,
+                    'is_replacement'          => false,
+                    'has_chargeback'          => $disputed_amount > 0,
+                    'source'                  => 'woo',
+                    'has_subscription_parent' => $has_parent,
+                    'has_subscription_renewal' => $has_renewal,
+                    'items'                   => $get_wc_order_items($order), // 👈 names only
                 ];
             }
         } catch (Throwable $e) {
         }
 
-        // ---- 2) ARCHIVED Woo orders (unchanged, add flags) ----
+        // --- 2) Archived Woo orders ---
         $archived_orders = [];
         try {
             $sql = $wpdb->prepare(
-                "SELECT 
-                p.ID, 
-                p.post_status, 
+                "SELECT
+                p.ID,
+                p.post_status,
                 p.post_date_gmt,
                 MAX(CASE WHEN pm.meta_key = '_order_total' THEN pm.meta_value END) AS order_total,
-                MAX(CASE WHEN pm.meta_key = '_order_currency' THEN pm.meta_value END) AS order_currency
+                MAX(CASE WHEN pm.meta_key = '_order_currency' THEN pm.meta_value END) AS order_currency,
+                MAX(CASE WHEN pm.meta_key = '_subscription_parent'  THEN pm.meta_value END) AS subscription_parent,
+                MAX(CASE WHEN pm.meta_key = '_subscription_renewal' THEN pm.meta_value END) AS subscription_renewal
              FROM yom_archive_orders_posts p
              JOIN yom_archive_orders_postmeta m ON p.ID = m.post_id
              LEFT JOIN yom_archive_orders_postmeta pm ON p.ID = pm.post_id
-            WHERE p.post_type = 'shop_order'
-              AND p.post_status NOT IN ('trash', 'auto-draft')
-              AND m.meta_key = '_customer_user'
-              AND m.meta_value = %s
-            GROUP BY p.ID
-            ORDER BY p.post_date_gmt DESC
-            LIMIT %d OFFSET %d",
+             WHERE p.post_type = 'shop_order'
+               AND p.post_status NOT IN ('trash', 'auto-draft')
+               AND m.meta_key = '_customer_user'
+               AND m.meta_value = %s
+             GROUP BY p.ID
+             ORDER BY p.post_date_gmt DESC
+             LIMIT %d OFFSET %d",
                 $user_id,
                 $per_page,
                 $offset
             );
             $archived_posts = $wpdb->get_results($sql);
+
             foreach ($archived_posts as $post) {
                 $archived_orders[] = [
-                    'id'            => (int) $post->ID,
-                    'status'        => $post->post_status,
-                    'total'         => isset($post->order_total) ? (float) $post->order_total : 0.0,
-                    'currency'      => isset($post->order_currency) ? $post->order_currency : get_woocommerce_currency(),
-                    'date_created'  => $post->post_date_gmt,
-                    'is_archived'   => true,
-                    'is_replacement' => false,
-                    'has_chargeback' => false,
-                    'source'        => 'archived',
+                    'id'                      => (int) $post->ID,
+                    'status'                  => $post->post_status,
+                    'total'                   => isset($post->order_total) ? (float) $post->order_total : 0.0,
+                    'currency'                => isset($post->order_currency) ? $post->order_currency : get_woocommerce_currency(),
+                    'date_created'            => $post->post_date_gmt,
+                    'is_archived'             => true,
+                    'is_replacement'          => false,
+                    'has_chargeback'          => false,
+                    'source'                  => 'archived',
+                    'has_subscription_parent' => !empty($post->subscription_parent),
+                    'has_subscription_renewal' => !empty($post->subscription_renewal),
+                    'items'                   => null, // no archive items available
                 ];
             }
         } catch (Throwable $e) {
         }
 
-        // ---- 3) REPLACEMENT orders (NEW) ----
+        // --- 3) Replacement orders ---
         $replacement_orders = [];
         try {
             if (function_exists('wro_get_orders')) {
@@ -1537,42 +1632,42 @@ class PFMP_REST_Orders {
                 $rep_list   = $rep_result['orders'] ?? [];
 
                 foreach ($rep_list as $rep) {
-                    // $rep may be an object (WRO_Replacement_Order) or array—handle both
-                    $rep_id    = is_object($rep) ? (int)$rep->id : (int)($rep['id'] ?? 0);
-                    $created   = is_object($rep) ? ($rep->created_at ?? null) : ($rep['created_at'] ?? null);
-                    $status    = is_object($rep) ? ($rep->status ?? '') : ($rep['status'] ?? '');
-                    $items     = is_object($rep) ? ($rep->items ?? []) : ($rep['items'] ?? []);
+                    $rep_id  = is_object($rep) ? (int)$rep->id : (int)($rep['id'] ?? 0);
+                    $created = is_object($rep) ? ($rep->created_at ?? null) : ($rep['created_at'] ?? null);
+                    $status  = is_object($rep) ? ($rep->status ?? '') : ($rep['status'] ?? '');
+                    $items   = is_object($rep) ? ($rep->items ?? [])  : ($rep['items'] ?? []);
 
-                    // Compute a simple total from items->total if present
                     $total = 0.0;
                     if (is_array($items)) {
                         foreach ($items as $it) {
                             $total += (float) ($it['total'] ?? 0);
                         }
                     }
+
                     $replacement_orders[] = [
-                        'id'            => $rep_id,
-                        'status'        => $status,              // keep native replacement status
-                        'total'         => $total,               // simple sum; good enough for list view
-                        'currency'      => get_woocommerce_currency(),
-                        'date_created'  => $created ?: null,
-                        'is_archived'   => false,
-                        'is_replacement' => true,                 // <-- flag for UI
-                        'has_chargeback' => false,
-                        'source'        => 'replacement',
+                        'id'                      => $rep_id,
+                        'status'                  => $status,
+                        'total'                   => $total,
+                        'currency'                => get_woocommerce_currency(),
+                        'date_created'            => $created ?: null,
+                        'is_archived'             => false,
+                        'is_replacement'          => true,
+                        'has_chargeback'          => false,
+                        'source'                  => 'replacement',
+                        'has_subscription_parent' => false,
+                        'has_subscription_renewal' => false,
+                        'items'                   => $get_replacement_items($items), // 👈 names only
                     ];
                 }
             }
         } catch (Throwable $e) {
         }
 
-        // ---- 4) Merge + sort by date ----
+        // --- 4) Merge + sort ---
         $all_orders = array_merge($live_orders, $archived_orders, $replacement_orders);
-        usort($all_orders, function ($a, $b) {
-            return strtotime($b['date_created'] ?? '1970-01-01') <=> strtotime($a['date_created'] ?? '1970-01-01');
-        });
+        usort($all_orders, fn($a, $b) => strtotime($b['date_created'] ?? '1970-01-01') <=> strtotime($a['date_created'] ?? '1970-01-01'));
 
-        // ---- 5) De-dup using composite key (source:id) so different sources don't collide ----
+        // --- 5) Dedup ---
         $seen = [];
         $deduped = [];
         foreach ($all_orders as $order) {
@@ -1582,11 +1677,10 @@ class PFMP_REST_Orders {
             $deduped[]  = $order;
         }
 
-        // ---- 6) Slice page (same semantics as before) ----
-        $result = array_slice($deduped, 0, $per_page);
-
-        return rest_ensure_response($result);
+        // --- 6) Slice ---
+        return rest_ensure_response(array_slice($deduped, 0, $per_page));
     }
+
 
 
 
@@ -1673,6 +1767,12 @@ class PFMP_REST_Orders {
 
                 $order->add_order_note($note);
                 $order->save();
+
+                PFMP_Utils::log_admin_action(
+                    'update',
+                    'order',
+                    "Updated order #{$order_id}" . (!empty($updated_fields) ? ' (fields: ' . implode(', ', $updated_fields) . ')' : '')
+                );
             }
 
             return rest_ensure_response(['success' => true, 'order_id' => $order_id]);
@@ -1691,9 +1791,9 @@ class PFMP_REST_Orders {
             global $wpdb;
             // Fetch from archive tables (example for "General Info" only)
             $sql = $wpdb->prepare(
-                "SELECT 
-                p.ID, 
-                p.post_status, 
+                "SELECT
+                p.ID,
+                p.post_status,
                 p.post_date_gmt,
                 MAX(CASE WHEN pm.meta_key = '_order_total' THEN pm.meta_value END) AS order_total,
                 MAX(CASE WHEN pm.meta_key = '_order_currency' THEN pm.meta_value END) AS order_currency,
@@ -1977,14 +2077,14 @@ class PFMP_REST_Orders {
             $wh = $request['warehouse'];
             if ($wh === 'shipstation') {
                 $meta_query[] = [
-                    'relation' => 'OR',
-                    ['key' => 'warehouse_to_export', 'compare' => 'NOT EXISTS'],
-                    ['key' => 'warehouse_to_export', 'value' => '', 'compare' => '='],
+                    'key'     => 'warehouse_to_export',
+                    'compare' => 'MISSING_OR_EMPTY',
                 ];
             } else {
                 $meta_query[] = [
-                    'key'   => 'warehouse_to_export',
-                    'value' => $wh,
+                    'key'     => 'warehouse_to_export',
+                    'value'   => $wh,
+                    'compare' => '=',
                 ];
             }
         }
@@ -2046,6 +2146,19 @@ class PFMP_REST_Orders {
                     'value' => 0,
                     'compare' => '>',
                     'type' => 'NUMERIC',
+                ];
+            } elseif ($tag === 'hotjar') {
+                $meta_query[] = [
+                    'relation' => 'AND',
+                    [
+                        'key'     => '_hotjar_last_recording_url',
+                        'compare' => 'EXISTS',
+                    ],
+                    [
+                        'key'     => '_hotjar_last_recording_url',
+                        'value'   => '',
+                        'compare' => '!=',
+                    ],
                 ];
             }
         }

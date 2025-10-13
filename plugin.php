@@ -8,7 +8,7 @@
  */
 
 
- //Plugin.php
+//Plugin.php
 
 defined('ABSPATH') || exit;
 
@@ -19,6 +19,8 @@ require_once plugin_dir_path(__FILE__) . 'includes/class-pfmp-rest-subscriptions
 require_once plugin_dir_path(__FILE__) . 'includes/class-pfmp-rest-customers.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-pfmp-rest-replacements.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-pfmp-rest-reports.php';
+require_once plugin_dir_path(__FILE__) . 'includes/class-pfmp-rest-admin-actions.php';
+require_once plugin_dir_path(__FILE__) . 'includes/class-pfmp-rest-coupons.php';
 
 require_once plugin_dir_path(__FILE__) . 'includes/class-pfmp-admin.php';
 
