@@ -13,7 +13,6 @@
             <PastOrdersPanel :customerId="customerId" />
             <CustomerSubscriptionsPanel :customerId="customerId" />
             <YotpoPanel :customerId="customerId" source="loyalty" />
-            <YotpoPanel :customerId="customerId" source="sweepstakes" />
         </div>
     </div>
 </template>
