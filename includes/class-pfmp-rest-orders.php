@@ -1483,57 +1483,77 @@ class PFMP_REST_Orders {
     public function get_orders_by_user_id(WP_REST_Request $request) {
         global $wpdb;
 
-        // --- Helpers ---
-        $aggregate_items = function (array $rows) {
-            $map = [];
-            foreach ($rows as $r) {
-                $name = (string)($r['name'] ?? '');
-                $qty  = (int)($r['qty'] ?? 1);
-
-                if (!isset($map[$name])) {
-                    $map[$name] = ['name' => $name, 'qty' => $qty];
-                } else {
-                    $map[$name]['qty'] += $qty;
-                }
-            }
-            return array_values(array_filter($map, fn($it) => $it['qty'] > 0));
-        };
-
-        $get_wc_order_items = function (WC_Order $order) use ($aggregate_items) {
-            $rows = [];
-            foreach ($order->get_items('line_item') as $item) {
-                $rows[] = [
-                    'name' => (string) $item->get_name(),
-                    'qty'  => (int) $item->get_quantity(),
-                ];
-            }
-            return $aggregate_items($rows);
-        };
-
-        $get_replacement_items = function ($rep_items) use ($aggregate_items) {
-            $rows = [];
-            if (is_array($rep_items)) {
-                foreach ($rep_items as $it) {
-                    $rows[] = [
-                        'name' => (string) ($it['name'] ?? $it['product_name'] ?? $it['title'] ?? ''),
-                        'qty'  => (int)    ($it['qty'] ?? $it['quantity'] ?? 1),
-                    ];
-                }
-            }
-            return $aggregate_items($rows);
-        };
-
-        // --- Validate ---
-        $user_id  = absint($request['user_id']);
+        // -------- Validate --------
+        $user_id = absint($request['user_id']);
         if (!$user_id) {
             return new WP_Error('invalid_user', 'Invalid user ID.', ['status' => 400]);
         }
-
-        $per_page = absint($request->get_param('per_page')) ?: 10;
-        $page     = absint($request->get_param('page')) ?: 1;
+        $per_page = max(1, absint($request->get_param('per_page') ?: 10));
+        $page     = max(1, absint($request->get_param('page') ?: 1));
         $offset   = ($page - 1) * $per_page;
 
-        // --- 1) Live Woo orders ---
+        // -------- Helpers --------
+        $aggregate_items = function (array $rows) {
+            // rows: [{ name, qty }]
+            $map = [];
+            foreach ($rows as $r) {
+                $name = trim((string)($r['name'] ?? ''));
+                $qty  = (int)($r['qty'] ?? 0);
+                if ($name === '' || $qty <= 0) continue;
+                $map[$name] = ['name' => $name, 'qty' => ($map[$name]['qty'] ?? 0) + $qty];
+            }
+            return array_values($map);
+        };
+
+        $resolve_product_name = function (int $product_id) {
+            if ($product_id <= 0) return '';
+            $p = wc_get_product($product_id);
+            return $p ? (string)$p->get_name() : '';
+        };
+
+        // Normalize ANY item shape (WC, WRO objects, or arrays) -> { name, qty }
+        $normalize_line_item = function ($it) use ($resolve_product_name) {
+            $name = '';
+            $qty  = 0;
+            if (is_object($it)) {
+                if (method_exists($it, 'get_name'))     $name = (string)$it->get_name();
+                if (method_exists($it, 'get_quantity')) $qty  = (int)$it->get_quantity();
+
+                if ($name === '') {
+                    $pid = 0;
+                    if (method_exists($it, 'get_variation_id')) $pid = (int)$it->get_variation_id();
+                    if (!$pid && method_exists($it, 'get_product_id')) $pid = (int)$it->get_product_id();
+                    if ($pid) $name = $resolve_product_name($pid);
+                }
+
+                if ($qty <= 0 && isset($it->quantity)) $qty = (int)$it->quantity;
+                if ($qty <= 0 && isset($it->qty))      $qty = (int)$it->qty;
+            } else {
+                // Array payloads
+                $name = (string)($it['name'] ?? $it['product_name'] ?? $it['title'] ?? '');
+                $qty  = (int)   ($it['quantity'] ?? $it['qty'] ?? 0);
+                if ($name === '') {
+                    $pid = (int)($it['variation_id'] ?? 0);
+                    if (!$pid) $pid = (int)($it['product_id'] ?? 0);
+                    if ($pid) $name = $resolve_product_name($pid);
+                }
+            }
+
+            if ($qty <= 0) $qty = 1;
+            return ['name' => $name, 'qty' => $qty];
+        };
+
+        $normalize_items = function ($items) use ($normalize_line_item, $aggregate_items) {
+            $rows = [];
+            if (is_iterable($items)) {
+                foreach ($items as $it) $rows[] = $normalize_line_item($it);
+            }
+            return $aggregate_items($rows);
+        };
+
+        $safe_date = fn($dt) => $dt ? date('Y-m-d H:i:s', strtotime((string)$dt)) : null;
+
+        // -------- 1) Live Woo orders --------
         $live_orders = [];
         try {
             $orders = wc_get_orders([
@@ -1542,34 +1562,33 @@ class PFMP_REST_Orders {
                 'paged'       => $page,
                 'orderby'     => 'date',
                 'order'       => 'DESC',
-                'status'      => array_keys(wc_get_order_statuses())
+                'status'      => array_keys(wc_get_order_statuses()),
             ]);
 
             foreach ($orders as $order) {
                 /** @var WC_Order $order */
-                $disputed_amount = (float) $order->get_meta('disputed_amount');
-                $has_parent      = (bool) $order->get_meta('_subscription_parent');
-                $has_renewal     = (bool) $order->get_meta('_subscription_renewal');
-
                 $live_orders[] = [
-                    'id'                      => $order->get_id(),
-                    'status'                  => $order->get_status(),
-                    'total'                   => (float) $order->get_total(),
-                    'currency'                => $order->get_currency(),
-                    'date_created'            => $order->get_date_created() ? $order->get_date_created()->date('Y-m-d H:i:s') : null,
-                    'is_archived'             => false,
-                    'is_replacement'          => false,
-                    'has_chargeback'          => $disputed_amount > 0,
-                    'source'                  => 'woo',
-                    'has_subscription_parent' => $has_parent,
-                    'has_subscription_renewal' => $has_renewal,
-                    'items'                   => $get_wc_order_items($order), // 👈 names only
+                    'id'                        => $order->get_id(),
+                    'status'                    => $order->get_status(),
+                    'total'                     => (float)$order->get_total(),
+                    'currency'                  => $order->get_currency(),
+                    'date_created'              => $order->get_date_created() ? $order->get_date_created()->date('Y-m-d H:i:s') : null,
+                    'is_archived'               => false,
+                    'is_replacement'            => false,
+                    'has_chargeback'            => ((float)$order->get_meta('disputed_amount')) > 0,
+                    'source'                    => 'woo',
+                    'has_subscription_parent'   => (bool)$order->get_meta('_subscription_parent'),
+                    'has_subscription_renewal'  => (bool)$order->get_meta('_subscription_renewal'),
+                    'items'                     => (function () use ($order, $normalize_items) {
+                        $line_items = $order->get_items('line_item');
+                        return $normalize_items($line_items);
+                    })(),
                 ];
             }
-        } catch (Throwable $e) {
+        } catch (\Throwable $e) {
         }
 
-        // --- 2) Archived Woo orders ---
+        // -------- 2) Archived Woo orders (no items) --------
         $archived_orders = [];
         try {
             $sql = $wpdb->prepare(
@@ -1582,7 +1601,7 @@ class PFMP_REST_Orders {
                 MAX(CASE WHEN pm.meta_key = '_subscription_parent'  THEN pm.meta_value END) AS subscription_parent,
                 MAX(CASE WHEN pm.meta_key = '_subscription_renewal' THEN pm.meta_value END) AS subscription_renewal
              FROM yom_archive_orders_posts p
-             JOIN yom_archive_orders_postmeta m ON p.ID = m.post_id
+             JOIN yom_archive_orders_postmeta m  ON p.ID = m.post_id
              LEFT JOIN yom_archive_orders_postmeta pm ON p.ID = pm.post_id
              WHERE p.post_type = 'shop_order'
                AND p.post_status NOT IN ('trash', 'auto-draft')
@@ -1595,91 +1614,123 @@ class PFMP_REST_Orders {
                 $per_page,
                 $offset
             );
-            $archived_posts = $wpdb->get_results($sql);
 
-            foreach ($archived_posts as $post) {
+            $rows = $wpdb->get_results($sql);
+            foreach ($rows as $r) {
                 $archived_orders[] = [
-                    'id'                      => (int) $post->ID,
-                    'status'                  => $post->post_status,
-                    'total'                   => isset($post->order_total) ? (float) $post->order_total : 0.0,
-                    'currency'                => isset($post->order_currency) ? $post->order_currency : get_woocommerce_currency(),
-                    'date_created'            => $post->post_date_gmt,
-                    'is_archived'             => true,
-                    'is_replacement'          => false,
-                    'has_chargeback'          => false,
-                    'source'                  => 'archived',
-                    'has_subscription_parent' => !empty($post->subscription_parent),
-                    'has_subscription_renewal' => !empty($post->subscription_renewal),
-                    'items'                   => null, // no archive items available
+                    'id'                        => (int)$r->ID,
+                    'status'                    => (string)$r->post_status,
+                    'total'                     => isset($r->order_total) ? (float)$r->order_total : 0.0,
+                    'currency'                  => isset($r->order_currency) ? (string)$r->order_currency : get_woocommerce_currency(),
+                    'date_created'              => $safe_date($r->post_date_gmt),
+                    'is_archived'               => true,
+                    'is_replacement'            => false,
+                    'has_chargeback'            => false,
+                    'source'                    => 'archived',
+                    'has_subscription_parent'   => !empty($r->subscription_parent),
+                    'has_subscription_renewal'  => !empty($r->subscription_renewal),
+                    'items'                     => null, // no archive items available
                 ];
             }
-        } catch (Throwable $e) {
+        } catch (\Throwable $e) {
         }
 
-        // --- 3) Replacement orders ---
+        // -------- 3) Replacement orders (normalized like Woo) --------
         $replacement_orders = [];
         try {
             if (function_exists('wro_get_orders')) {
-                $rep_args = [
+                $rep_result = wro_get_orders([
                     'customer_id' => $user_id,
                     'limit'       => $per_page,
                     'offset'      => $offset,
                     'orderby'     => 'date_created',
                     'order'       => 'DESC',
                     'paginate'    => true,
-                ];
-                $rep_result = wro_get_orders($rep_args);
-                $rep_list   = $rep_result['orders'] ?? [];
+                ]);
 
-                foreach ($rep_list as $rep) {
-                    $rep_id  = is_object($rep) ? (int)$rep->id : (int)($rep['id'] ?? 0);
-                    $created = is_object($rep) ? ($rep->created_at ?? null) : ($rep['created_at'] ?? null);
-                    $status  = is_object($rep) ? ($rep->status ?? '') : ($rep['status'] ?? '');
-                    $items   = is_object($rep) ? ($rep->items ?? [])  : ($rep['items'] ?? []);
+                foreach (($rep_result['orders'] ?? []) as $rep) {
+                    $is_obj   = is_object($rep);
+                    $rep_id   = $is_obj ? (int)$rep->id            : (int)($rep['id'] ?? 0);
+                    $created  = $is_obj ? ($rep->created_at ?? '') : ($rep['created_at'] ?? '');
+                    $status   = $is_obj ? ($rep->status ?? '')     : ($rep['status'] ?? '');
+                    $itemsRaw = $is_obj ? ($rep->items ?? [])      : ($rep['items'] ?? []);
 
+                    // items normalized exactly like Woo
+                    $items = $normalize_items($itemsRaw);
+
+                    // total: prefer item->get_total() / ['total']; fallback to product price * qty
                     $total = 0.0;
-                    if (is_array($items)) {
-                        foreach ($items as $it) {
-                            $total += (float) ($it['total'] ?? 0);
+                    if (is_iterable($itemsRaw)) {
+                        foreach ($itemsRaw as $it) {
+                            if (is_object($it) && method_exists($it, 'get_total')) {
+                                $total += (float)$it->get_total();
+                                continue;
+                            }
+                            if (is_array($it) && isset($it['total'])) {
+                                $total += (float)$it['total'];
+                                continue;
+                            }
+                            // fallback price * qty
+                            $qty = 1;
+                            if (is_object($it) && method_exists($it, 'get_quantity')) {
+                                $qty = max(1, (int)$it->get_quantity());
+                            } elseif (is_array($it)) {
+                                $qty = max(1, (int)($it['quantity'] ?? $it['qty'] ?? 1));
+                            }
+                            $pid = 0;
+                            if (is_object($it)) {
+                                if (method_exists($it, 'get_variation_id')) $pid = (int)$it->get_variation_id();
+                                if (!$pid && method_exists($it, 'get_product_id')) $pid = (int)$it->get_product_id();
+                            } else {
+                                $pid = (int)($it['variation_id'] ?? $it['product_id'] ?? 0);
+                            }
+                            if ($pid) {
+                                $p = wc_get_product($pid);
+                                if ($p) $total += (float)$p->get_price() * $qty;
+                            }
                         }
                     }
 
                     $replacement_orders[] = [
-                        'id'                      => $rep_id,
-                        'status'                  => $status,
-                        'total'                   => $total,
-                        'currency'                => get_woocommerce_currency(),
-                        'date_created'            => $created ?: null,
-                        'is_archived'             => false,
-                        'is_replacement'          => true,
-                        'has_chargeback'          => false,
-                        'source'                  => 'replacement',
-                        'has_subscription_parent' => false,
-                        'has_subscription_renewal' => false,
-                        'items'                   => $get_replacement_items($items), // 👈 names only
+                        'id'                        => $rep_id,
+                        'status'                    => $status,
+                        'total'                     => $total,
+                        'currency'                  => get_woocommerce_currency(),
+                        'date_created'              => $safe_date($created),
+                        'is_archived'               => false,
+                        'is_replacement'            => true,
+                        'has_chargeback'            => false,
+                        'source'                    => 'replacement',
+                        'has_subscription_parent'   => false,
+                        'has_subscription_renewal'  => false,
+                        'items'                     => $items, // ✅ same shape as Woo
                     ];
                 }
             }
-        } catch (Throwable $e) {
+        } catch (\Throwable $e) {
         }
 
-        // --- 4) Merge + sort ---
-        $all_orders = array_merge($live_orders, $archived_orders, $replacement_orders);
-        usort($all_orders, fn($a, $b) => strtotime($b['date_created'] ?? '1970-01-01') <=> strtotime($a['date_created'] ?? '1970-01-01'));
+        // -------- 4) Merge, sort, dedupe, slice --------
+        $all = array_merge($live_orders, $archived_orders, $replacement_orders);
 
-        // --- 5) Dedup ---
+        usort($all, function ($a, $b) {
+            $ad = strtotime($a['date_created'] ?? '1970-01-01');
+            $bd = strtotime($b['date_created'] ?? '1970-01-01');
+            return $bd <=> $ad;
+        });
+
         $seen = [];
-        $deduped = [];
-        foreach ($all_orders as $order) {
-            $key = ($order['source'] ?? 'woo') . ':' . $order['id'];
-            if (isset($seen[$key])) continue;
-            $seen[$key] = true;
-            $deduped[]  = $order;
+        $dedup = [];
+        foreach ($all as $o) {
+            $k = ($o['source'] ?? 'woo') . ':' . $o['id'];
+            if (isset($seen[$k])) continue;
+            $seen[$k] = true;
+            $dedup[]  = $o;
         }
 
-        // --- 6) Slice ---
-        return rest_ensure_response(array_slice($deduped, 0, $per_page));
+        return rest_ensure_response(array_slice($dedup, 0, $per_page));
     }
+
 
 
 

@@ -37,6 +37,11 @@ const reports = [
         description: "Cross-check WooCommerce order totals and tax for verification. CSV export.",
     },
     {
+        key: "refunds-verification",
+        title: "Refunds Verification Report",
+        description: "Cross-check Woo refunds vs Braintree credits and Complyt refund transactions. CSV export.",
+    },
+    {
         key: "export-to-narvar",
         title: "Export Orders to Narvar",
         description: "Generate a Narvar-ready export by date range or specific order IDs.",

@@ -22,6 +22,7 @@ import RefundsPanel from "@/components/reports-panels/RefundsPanel.vue";
 import ReportListPanel from "@/components/reports-panels/ReportListPanel.vue";
 import TaxesVerificationPanel from "@/components/reports-panels/TaxesVerificationPanel.vue";
 import NarvarExportPanel from "@/components/reports-panels/NarvarExportPanel.vue";
+import RefundsVerificationPanel from "@/components/reports-panels/RefundsVerificationPanel.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -41,6 +42,10 @@ const reportMap = {
     "taxes-verification": {
         title: "Taxes Verification Report",
         component: TaxesVerificationPanel,
+    },
+    "refunds-verification": {
+        title: "Refunds Verification Report",
+        component: RefundsVerificationPanel,
     },
     "export-to-narvar": {
         title: "Export Orders to Narvar",

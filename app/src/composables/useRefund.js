@@ -25,9 +25,27 @@ export function useRefund({ order, orderId, emit, message, formatCurrency }) {
     const pendingRefundItems = ref([]);
     const pendingRefundFees = ref([]);
     const pendingRefundShipping = ref([]);
-    const refundViaBraintree = ref(true);
+
     const refundReason = ref("");
     const refundPercent = ref();
+
+    const isBraintree = computed(() => !!order.value?.payment_method?.includes("braintree"));
+    const refundViaBraintree = ref(isBraintree.value);
+    const userTouchedRefundVia = ref(false);
+
+    watch(
+        () => order.value?.payment_method,
+        () => {
+            if (!userTouchedRefundVia.value && !refundMode.value) {
+                refundViaBraintree.value = isBraintree.value;
+            }
+        },
+        { immediate: true }
+    );
+
+    watch(refundViaBraintree, () => {
+        userTouchedRefundVia.value = true;
+    });
 
     // Apply percent to all refund fields (line items, fees, shipping)
     function applyRefundPercent() {
@@ -247,7 +265,7 @@ export function useRefund({ order, orderId, emit, message, formatCurrency }) {
                 })),
                 fees: pendingRefundFees.value,
                 shipping: pendingRefundShipping.value,
-                refund_via_braintree: refundViaBraintree.value ? 1 : 0,
+                refund_via_braintree: isBraintree.value && refundViaBraintree.value ? 1 : 0,
                 reason: refundReason.value,
             };
             console.log("Refund payload:", payload);

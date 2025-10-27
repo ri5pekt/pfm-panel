@@ -46,6 +46,12 @@ class PFMP_REST_Reports {
                 require_once __DIR__ . '/reports/class-report-taxes-verification.php';
                 $report = new PFMP_Report_Taxes_Verification();
                 return $report->generate($data);
+
+            case 'refunds-verification': // NEW
+                require_once __DIR__ . '/reports/class-report-refunds-verification.php';
+                $report = new PFMP_Report_Refunds_Verification();
+                return $report->generate($data);
+
             case 'export-to-narvar':
                 require_once __DIR__ . '/reports/class-report-export-to-narvar.php';
                 $report = new PFMP_Report_Export_To_Narvar();

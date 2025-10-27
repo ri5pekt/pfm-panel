@@ -3,13 +3,7 @@
     <div class="panel past-orders-panel">
         <h3>Customer's Past Orders</h3>
         <div class="past-orders-scroll">
-            <n-data-table
-                :columns="columns"
-                :data="pastOrders"
-                :loading="loading"
-                size="small"
-                striped
-            />
+            <n-data-table :columns="columns" :data="pastOrders" :loading="loading" size="small" striped />
             <div class="load-more-wrapper" v-if="hasMore">
                 <n-button @click="loadMore" :loading="loading" size="small"> Load More </n-button>
             </div>
@@ -65,8 +59,6 @@ function withTooltip(vnode, row) {
         }
     );
 }
-
-
 
 const columns = [
     {
@@ -138,8 +130,7 @@ async function fetchOrders() {
         const data = await request({
             url: `/orders/by-user/${props.customerId}?page=${page.value}&per_page=${perPage}`,
         });
-        // tiny sanity log to ensure items are present
-        // console.debug("past-orders page", page.value, data.map(d => ({ id: d.id, items: d.items?.length })));
+
         const list = props.excludeOrderId ? data.filter((o) => o.id !== props.excludeOrderId) : data;
         hasMore.value = data.length === perPage;
         pastOrders.value.push(...list);
