@@ -44,7 +44,7 @@
                     </p>
                     <p v-if="trackingNumber">
                         <strong>Tracking Number: </strong>
-                        <a :href="`https://particle.aftership.com/${trackingNumber}`" target="_blank">
+                        <a :href="narvarTrackingUrl" target="_blank" rel="noopener">
                             {{ trackingNumber }}
                         </a>
                     </p>
@@ -149,6 +149,35 @@ const props = defineProps({
 const baseUrl = computed(() =>
     props.sourceType === "replacement" ? `/replacements/${props.orderId}` : `/orders/${props.orderId}`
 );
+
+function getTrackingCarrier() {
+    // Same as $tracking_items = $order->get_meta('_wc_shipment_tracking_items', true);
+    const items = props.getMeta?.("_wc_shipment_tracking_items");
+    if (!items || !Array.isArray(items) || items.length === 0) return "Other";
+
+    const tracking = items[0];
+    if (!tracking) return "Other";
+
+    let carrier = tracking.tracking_provider || tracking.custom_tracking_provider || "Other";
+
+    // === Normalize to Narvar slugs (just like your PHP ===
+    if (carrier === "Amazon Shipping") carrier = "amazon";
+    if (carrier.toLowerCase().includes("dhl klb")) carrier = "dhlglobal";
+    if (carrier.toLowerCase().includes("dhl e")) carrier = "dhlglobal";
+    if (carrier.toLowerCase().includes("dhl")) carrier = "dhlglobal";
+    if (carrier.toLowerCase().includes("veho")) carrier = "veho"; // ← From your screenshot
+    if (carrier === "" || carrier === "Other") carrier = "other";
+
+    return carrier.toLowerCase();
+}
+
+const narvarTrackingUrl = computed(() => {
+    const tn = props.trackingNumber;
+    if (!tn) return null;
+
+    const carrier = getTrackingCarrier();
+    return `https://tracking.narvar.com/tracking/particleformen/${carrier}/?tracking_numbers=${encodeURIComponent(tn)}`;
+});
 
 watchEffect(() => {
     const meta = props.getMeta("warehouse_to_export");
