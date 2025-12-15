@@ -23,6 +23,8 @@ import ReportListPanel from "@/components/reports-panels/ReportListPanel.vue";
 import TaxesVerificationPanel from "@/components/reports-panels/TaxesVerificationPanel.vue";
 import NarvarExportPanel from "@/components/reports-panels/NarvarExportPanel.vue";
 import RefundsVerificationPanel from "@/components/reports-panels/RefundsVerificationPanel.vue";
+import ReplacementOrdersPanel from "@/components/reports-panels/ReplacementOrdersPanel.vue";
+import SaleTaxComparePanel from "@/components/reports-panels/SaleTaxComparePanel.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -39,6 +41,10 @@ const reportMap = {
         title: "Refunds Report",
         component: RefundsPanel,
     },
+    "replacement-orders": {
+        title: "Replacement Orders Report",
+        component: ReplacementOrdersPanel,
+    },
     "taxes-verification": {
         title: "Taxes Verification Report",
         component: TaxesVerificationPanel,
@@ -50,6 +56,10 @@ const reportMap = {
     "export-to-narvar": {
         title: "Export Orders to Narvar",
         component: NarvarExportPanel,
+    },
+    "sale-tax-compare": {
+        title: "Sale Tax Compare (file upload)",
+        component: SaleTaxComparePanel,
     },
 };
 

@@ -4,6 +4,7 @@
 defined('ABSPATH') || exit;
 
 require_once plugin_dir_path(__FILE__) . '/class-pfmp-utils.php';
+require_once plugin_dir_path(__FILE__) . '/class-pfmp-query-utils.php';
 
 class PFMP_REST_Orders {
     public function __construct() {
@@ -135,6 +136,12 @@ class PFMP_REST_Orders {
             'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
         ]);
 
+        register_rest_route('pfm-panel/v1', '/orders/(?P<order_id>\d+)/narvar-tracking-url', [
+            'methods'  => WP_REST_Server::READABLE,
+            'callback' => [$this, 'get_narvar_tracking_url'],
+            'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
+        ]);
+
         register_rest_route('pfm-panel/v1', '/orders/(?P<id>\d+)/resend-email', [
             'methods'             => WP_REST_Server::CREATABLE, // POST
             'callback'            => [$this, 'resend_order_email'],
@@ -143,7 +150,6 @@ class PFMP_REST_Orders {
                 'type' => ['sanitize_callback' => 'sanitize_text_field'], // processing | completed | invoice
             ],
         ]);
-
 
         register_rest_route('pfm-panel/v1', '/orders/status-counts', [
             'methods'             => WP_REST_Server::READABLE,
@@ -272,9 +278,6 @@ class PFMP_REST_Orders {
             return new WP_Error('email_send_failed', $e->getMessage(), ['status' => 500]);
         }
     }
-
-
-
     public function get_order_preview(WP_REST_Request $request) {
         $order_id = absint($request['order_id']);
         $order = wc_get_order($order_id);
@@ -298,6 +301,45 @@ class PFMP_REST_Orders {
         return rest_ensure_response(['items' => $items]);
     }
 
+    public function get_narvar_tracking_url(WP_REST_Request $request) {
+        $order_id = absint($request['order_id']);
+        if (!$order_id) {
+            return new WP_Error('invalid_order', 'Invalid order ID', ['status' => 400]);
+        }
+
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            return new WP_Error('not_found', 'Order not found', ['status' => 404]);
+        }
+
+        if (!class_exists('Narvar_Tracking_Integration')) {
+            return new WP_Error('narvar_unavailable', 'Narvar integration not available', ['status' => 500]);
+        }
+
+        try {
+            $narvar_instance = Narvar_Tracking_Integration::instance();
+            if (!method_exists($narvar_instance, 'get_narvar_tracking_url')) {
+                return new WP_Error('method_unavailable', 'Narvar tracking URL method not available', ['status' => 500]);
+            }
+
+            $tracking_url = $narvar_instance->get_narvar_tracking_url($order_id);
+
+            if (empty($tracking_url)) {
+                return rest_ensure_response([
+                    'success' => false,
+                    'tracking_url' => null,
+                    'message' => 'No tracking URL available for this order',
+                ]);
+            }
+
+            return rest_ensure_response([
+                'success' => true,
+                'tracking_url' => $tracking_url,
+            ]);
+        } catch (Throwable $e) {
+            return new WP_Error('narvar_error', $e->getMessage(), ['status' => 500]);
+        }
+    }
 
     private function get_avs_text($code) {
         $map = [
@@ -562,12 +604,25 @@ class PFMP_REST_Orders {
             'orderby'  => 'date_created',
             'order'    => 'DESC',
         ]);
-
+        $max_length = 300;
         $formatted = [];
         foreach ($notes as $note) {
+            // Use raw content as-is (with HTML)
+            $content = (string) $note->content;
+
+            // Apply length limit, but don't touch formatting
+            if ($max_length > 0 && strlen($content) > $max_length) {
+                // Use mb_substr if available, otherwise fall back to substr
+                if (function_exists('mb_substr')) {
+                    $content = mb_substr($content, 0, $max_length) . '…';
+                } else {
+                    $content = substr($content, 0, $max_length) . '…';
+                }
+            }
+
             $formatted[] = [
                 'id'           => $note->id,
-                'note'         => $note->content,
+                'note'         => $content,
                 'date_created' => $note->date_created ? $note->date_created->date('c') : '',
                 'author'       => $note->added_by ?: '',
                 'is_customer'  => $note->customer_note ? true : false,
@@ -580,11 +635,11 @@ class PFMP_REST_Orders {
 
     public function get_products_by_category(WP_REST_Request $request) {
         $categories = [
-            'face' => [7, 2213887, 100362, 100370, 616257, 1077388, 2299802],
+            'face' => [7, 2213887, 100362, 100370, 616257, 1077388, 2299802, 3312652],
             'hair' => [1860895, 570671, 216928, 1068419, 616215],
-            'body' => [1646173, 3276357, 2475444, 1450671, 1495139, 216919],
+            'body' => [1646173, 3276357, 2475444, 1450671, 1495139, 216919, 3008280],
             'wellness' => [2293541],
-            'bundles' => [1813624, 250223, 250209, 1868710, 616306, 1607485, 2769533, 2769100],
+            'bundles' => [1813624, 250223, 250209, 1868710, 616306, 1607485, 2769533, 2769100, 3279775],
         ];
         $labels = [
             'face' => 'Face',
@@ -631,34 +686,6 @@ class PFMP_REST_Orders {
 
         $updated = false;
 
-        // Helper to set tax, one tax rate per item/fee/shipping
-        function pfmp_set_single_tax($item, $new_total_tax, $context = '') {
-            try {
-                $taxes = $item->get_taxes();
-                $rate_ids = array_keys($taxes['total']);
-                $first_rate_id = $rate_ids ? $rate_ids[0] : null;
-
-                // If no rate in the taxes array, try to find from the order's tax items
-                if (!$first_rate_id) {
-                    $order_taxes = $item->get_order()->get_items('tax');
-                    if (!empty($order_taxes)) {
-                        $first_rate_id = (string) reset($order_taxes)->get_rate_id();
-                    }
-                }
-
-                // If still none, create a fake one and log
-                if (!$first_rate_id) {
-                    $first_rate_id = 1;
-                }
-
-                $taxes['total']    = [$first_rate_id => floatval($new_total_tax)];
-                $taxes['subtotal'] = [$first_rate_id => floatval($new_total_tax)];
-
-                $item->set_taxes($taxes);
-            } catch (\Throwable $e) {
-                PFMP_Utils::log("❌ pfmp_set_single_tax ERROR: " . $e->getMessage() . "\n" . $e->getTraceAsString());
-            }
-        }
 
         // Update items
         if (!empty($params['items']) && is_array($params['items'])) {
@@ -675,7 +702,7 @@ class PFMP_REST_Orders {
                     $item->set_total(floatval($item_data['total']));
                 }
                 if (isset($item_data['tax'])) {
-                    pfmp_set_single_tax($item, $item_data['tax'], 'line_item');
+                    $this->pfmp_set_single_tax($item, $item_data['tax'], 'line_item');
                 }
                 $item->save();
                 $updated = true;
@@ -695,7 +722,7 @@ class PFMP_REST_Orders {
                     $item->set_total(floatval($fee_data['total']));
                 }
                 if (isset($fee_data['tax'])) {
-                    pfmp_set_single_tax($item, $fee_data['tax'], 'fee');
+                    $this->pfmp_set_single_tax($item, $fee_data['tax'], 'fee');
                 }
                 $item->save();
                 $updated = true;
@@ -735,7 +762,7 @@ class PFMP_REST_Orders {
                 }
 
                 if (isset($ship_data['tax'])) {
-                    pfmp_set_single_tax($item, $ship_data['tax'], 'shipping');
+                    $this->pfmp_set_single_tax($item, $ship_data['tax'], 'shipping');
                 }
 
                 $item->save();
@@ -789,25 +816,7 @@ class PFMP_REST_Orders {
                 if ($order_item_id && $tax !== null) {
                     $item = $order->get_item($order_item_id);
                     if ($item) {
-                        // Set tax
-                        if (!function_exists('pfmp_set_single_tax')) {
-                            function pfmp_set_single_tax($item, $new_total_tax, $context = '') {
-                                $taxes = $item->get_taxes();
-                                $rate_ids = array_keys($taxes['total']);
-                                $first_rate_id = $rate_ids ? $rate_ids[0] : null;
-                                if (!$first_rate_id) {
-                                    $order_taxes = $item->get_order()->get_items('tax');
-                                    if (!empty($order_taxes)) {
-                                        $first_rate_id = (string) reset($order_taxes)->get_rate_id();
-                                    }
-                                }
-                                if (!$first_rate_id) $first_rate_id = 1;
-                                $taxes['total']    = [$first_rate_id => floatval($new_total_tax)];
-                                $taxes['subtotal'] = [$first_rate_id => floatval($new_total_tax)];
-                                $item->set_taxes($taxes);
-                            }
-                        }
-                        pfmp_set_single_tax($item, $tax, 'line_item');
+                        $this->pfmp_set_single_tax($item, $tax, 'line_item');
                         $item->save();
                     }
                 }
@@ -849,7 +858,7 @@ class PFMP_REST_Orders {
 
                 // 2. Now set tax
                 if ($fee_tax !== null) {
-                    pfmp_set_single_tax($item, $fee_tax, 'fee');
+                    $this->pfmp_set_single_tax($item, $fee_tax, 'fee');
                 }
 
                 // 3. Save the fee item
@@ -960,6 +969,22 @@ class PFMP_REST_Orders {
         ]);
     }
 
+    private function pfmp_set_single_tax($item, $new_total_tax, $context = '') {
+        $taxes = $item->get_taxes();
+        $rate_ids = array_keys($taxes['total']);
+        $first_rate_id = $rate_ids ? $rate_ids[0] : null;
+        if (!$first_rate_id) {
+            $order_taxes = $item->get_order()->get_items('tax');
+            if (!empty($order_taxes)) {
+                $first_rate_id = (string) reset($order_taxes)->get_rate_id();
+            }
+        }
+        if (!$first_rate_id) $first_rate_id = 1;
+        $taxes['total']    = [$first_rate_id => floatval($new_total_tax)];
+        $taxes['subtotal'] = [$first_rate_id => floatval($new_total_tax)];
+        $item->set_taxes($taxes);
+    }
+
     public function handle_bulk_action(WP_REST_Request $request) {
         $ids = $request->get_param('ids');
         $action = sanitize_text_field($request->get_param('action'));
@@ -973,7 +998,13 @@ class PFMP_REST_Orders {
             return new WP_Error('invalid_request', 'Invalid payload.', ['status' => 400]);
         }
 
+        global $wex_plugin;
+        $has_validation = isset($wex_plugin) && method_exists($wex_plugin, 'validate_order_address');
+
         $results = [];
+        $skipped = []; // Track orders skipped due to validation failures
+        $exported_order_ids = []; // Track successfully exported orders for bulk logging
+
         foreach ($ids as $id) {
             $order = wc_get_order(absint($id));
             if (!$order) continue;
@@ -996,22 +1027,89 @@ class PFMP_REST_Orders {
                 }
 
                 if ($warehouse_slug) {
-                    global $wex_plugin;
-                    $wex_plugin->send_order_to_warehouse($warehouse_slug, $id);
-                    $order->update_meta_data('warehouse_to_export', $warehouse_slug);
-                    $order->update_meta_data('warehouse_export_status', 'exported');
-                    $order->add_order_note("Bulk-exported to {$warehouse_slug} by $admin_name.");
-                    $order->save();
+                    // Validate address before exporting
+                    $validation_passed = true;
+                    $validation_message = '';
 
-                    PFMP_Utils::log_admin_action('bulk_export', 'order', "Exported order #{$id} to warehouse '{$warehouse_slug}'");
+                    if ($has_validation) {
+                        $validation_result = $wex_plugin->validate_order_address($id);
+
+                        if ($validation_result->is_valid === 'false') {
+                            $validation_passed = false;
+                            $validation_message = $validation_result->message ?? 'Invalid address';
+
+                            // Add note to order about validation failure
+                            $order->add_order_note(
+                                sprintf(
+                                    __('Bulk export skipped: Address validation failed - %s', 'warehouse-export'),
+                                    $validation_message
+                                )
+                            );
+                            $order->save();
+
+                            $skipped[] = [
+                                'id' => $id,
+                                'reason' => 'address_validation_failed',
+                                'message' => $validation_message
+                            ];
+                        }
+                    }
+
+                    // Only export if validation passed (or validation is not available)
+                    if ($validation_passed) {
+                        $response = $wex_plugin->send_order_to_warehouse($warehouse_slug, $id);
+
+                        if (!empty($response['status']) && $response['status'] === 'success') {
+                            $order->update_meta_data('warehouse_to_export', $warehouse_slug);
+                            $order->update_meta_data('warehouse_export_status', 'exported');
+                            $order->add_order_note("Bulk-exported to {$warehouse_slug} by $admin_name.");
+                            $order->save();
+
+                            // Collect order ID for bulk logging instead of logging individually
+                            $exported_order_ids[] = $id;
+                            $results[] = $id;
+                        } else {
+                            // Export failed (not validation, but warehouse API issue)
+                            $error_msg = !empty($response['message']) ? $response['message'] : 'Unknown error';
+                            $skipped[] = [
+                                'id' => $id,
+                                'reason' => 'export_failed',
+                                'message' => $error_msg
+                            ];
+                        }
+                    }
                 }
             }
         }
 
-        return rest_ensure_response([
+        // Log all exported orders in a single admin action log entry
+        if ($action === 'export_to_warehouse' && !empty($exported_order_ids)) {
+            $warehouse_slug = sanitize_text_field($value);
+            if ($warehouse_slug === 'decide_based_on_rules') {
+                $warehouse_slug = 'warehouse (auto-determined)';
+            }
+
+            $order_count = count($exported_order_ids);
+            $order_ids_str = implode(', ', $exported_order_ids);
+
+            PFMP_Utils::log_admin_action(
+                'bulk_export',
+                'order',
+                "Bulk exported {$order_count} order(s) to '{$warehouse_slug}': {$order_ids_str}"
+            );
+        }
+
+        $response_data = [
             'success' => true,
             'updated' => $results,
-        ]);
+        ];
+
+        // Include skipped orders info if any were skipped
+        if (!empty($skipped)) {
+            $response_data['skipped'] = $skipped;
+        }
+
+        return rest_ensure_response($response_data);
     }
 
     public function export_to_warehouse(WP_REST_Request $request) {
@@ -1050,19 +1148,30 @@ class PFMP_REST_Orders {
             ], 500);
         }
 
+        // Validate address before exporting
+        if (method_exists($wex_plugin, 'validate_order_address')) {
+            $validation_result = $wex_plugin->validate_order_address($order_id);
+
+            // Check if validation failed
+            if ($validation_result->is_valid === 'false') {
+                return new WP_REST_Response([
+                    'success' => false,
+                    'message' => 'Address validation failed: ' . ($validation_result->message ?? 'Invalid address'),
+                ], 400);
+            }
+        }
+
         $response = $wex_plugin->send_order_to_warehouse($warehouse_slug, $order_id);
 
         if (!empty($response['status']) && $response['status'] === 'success') {
             $order->update_meta_data('warehouse_to_export', $warehouse_slug);
             $order->update_meta_data('warehouse_export_status', 'exported');
 
-
             $note = sprintf(__('Order manually exported to %s by %s.', 'warehouse-export'), $warehouse_slug, $admin_name);
             $order->add_order_note($note);
             $order->save();
 
             PFMP_Utils::log_admin_action('export', 'order', "Exported order #{$order_id} to warehouse '{$warehouse_slug}'");
-
 
             return new WP_REST_Response([
                 'success' => true,
@@ -1757,6 +1866,7 @@ class PFMP_REST_Orders {
         if (isset($params['meta']) && is_array($params['meta'])) {
             foreach ($params['meta'] as $key => $value) {
                 $order->update_meta_data(sanitize_text_field($key), sanitize_text_field($value));
+                $updated_fields[] = "meta_{$key}";
             }
         }
 
@@ -1813,8 +1923,19 @@ class PFMP_REST_Orders {
             // Add order note summarizing updates
             if (!empty($updated_fields)) {
                 $note = "<b>Customer info updated by $admin_name</b><br><br>";
-                $note .= '🔄 <b>Billing and Shipping details were updated.</b><br><br>';
-                $note .= '✅ <b>Changes applied to:</b> ' . ($updated_profile ? 'Order and Customer Profile' : 'Order only');
+                $has_address_updates = array_filter($updated_fields, function ($field) {
+                    return strpos($field, 'billing_') === 0 || strpos($field, 'shipping_') === 0;
+                });
+                if (!empty($has_address_updates)) {
+                    $note .= '🔄 <b>Billing and Shipping details were updated.</b><br><br>';
+                    $note .= '✅ <b>Changes applied to:</b> ' . ($updated_profile ? 'Order and Customer Profile' : 'Order only');
+                }
+                $meta_updates = array_filter($updated_fields, function ($field) {
+                    return strpos($field, 'meta_') === 0;
+                });
+                if (!empty($meta_updates)) {
+                    $note .= '<br>📝 <b>Meta updated:</b> ' . implode(', ', $meta_updates);
+                }
 
                 $order->add_order_note($note);
                 $order->save();
@@ -2128,8 +2249,9 @@ class PFMP_REST_Orders {
             $wh = $request['warehouse'];
             if ($wh === 'shipstation') {
                 $meta_query[] = [
-                    'key'     => 'warehouse_to_export',
-                    'compare' => 'MISSING_OR_EMPTY',
+                    'relation' => 'OR',
+                    ['key' => 'warehouse_to_export', 'compare' => 'NOT EXISTS'],
+                    ['key' => 'warehouse_to_export', 'value' => '', 'compare' => '='],
                 ];
             } else {
                 $meta_query[] = [
@@ -2211,6 +2333,13 @@ class PFMP_REST_Orders {
                         'compare' => '!=',
                     ],
                 ];
+            } elseif ($tag === 'cs-added') {
+                $meta_query[] = [
+                    'key'     => '_ref-cart-sidebar-total-usd',
+                    'value'   => 0,
+                    'compare' => '!=',
+                    'type'    => 'NUMERIC',
+                ];
             }
         }
 
@@ -2255,6 +2384,57 @@ class PFMP_REST_Orders {
             $args['billing_email'] = $search_value;
         }
 
+
+
+
+        // --- Products search (HPOS, fast path) ---
+        if (($request['search_type'] ?? null) === 'products' && !empty($request['search_value'])) {
+            $page     = max(1, (int) $request['page']);
+            $per_page = min(100, max(1, (int) $request['per_page']));
+
+            // Parse raw "7,616257" or [7,616257]
+            $selected_ids = PFMP_Query_Utils::parse_product_ids($request['search_value']);
+            if (empty($selected_ids)) {
+                $r = rest_ensure_response([]);
+                $r->header('X-WP-Total', 0);
+                $r->header('X-WP-TotalPages', 0);
+                return $r;
+            }
+
+            // Expand each selected product into its group of translated IDs
+            $product_groups = PFMP_Query_Utils::expand_product_groups_wpml($selected_ids);
+            try {
+                // 1️⃣ SQL: Get paginated order IDs that contain all selected product groups
+                $slice = PFMP_Query_Utils::get_order_ids_by_product_groups_paginated(
+                    $product_groups,
+                    $page,
+                    $per_page
+                );
+
+                // 2️⃣ Load orders for those IDs & build payload
+                $payload = PFMP_Query_Utils::load_orders_payload($slice['ids']);
+
+                // 3️⃣ Build REST response
+                $resp = rest_ensure_response($payload);
+                $resp->header('X-WP-Total', (int) $slice['total']);
+                $resp->header(
+                    'X-WP-TotalPages',
+                    (int) ceil(((int) $slice['total']) / $per_page)
+                );
+
+                return $resp;
+            } catch (Throwable $e) {
+                return new WP_Error(
+                    'order_query_failed',
+                    'Failed to fetch orders.',
+                    ['status' => 500]
+                );
+            }
+        }
+
+
+
+
         if (!empty($meta_query)) {
             $args['meta_query'] = $meta_query;
         }
@@ -2273,6 +2453,9 @@ class PFMP_REST_Orders {
                     return $coupon->get_code();
                 }, $order->get_items('coupon'));
                 $data['refunded_amount'] = floatval($order->get_total_refunded());
+                if (($data['status'] ?? '') === 'failed') {
+                    $data['failed_reason'] = $this->get_failed_reason_for_order($order->get_id());
+                }
                 return $data;
             }, $query->orders);
 
@@ -2285,5 +2468,46 @@ class PFMP_REST_Orders {
             PFMP_Utils::log('Order query failed: ' . $e->getMessage());
             return new WP_Error('order_query_failed', 'Failed to fetch orders.', ['status' => 500]);
         }
+    }
+
+    private function get_failed_reason_for_order($order_id) {
+        if (!$order_id) {
+            return null;
+        }
+
+        try {
+            $notes = wc_get_order_notes([
+                'order_id' => $order_id,
+                'type' => 'internal',
+                'orderby' => 'date_created',
+                'order' => 'DESC',
+                'number' => 2,
+            ]);
+        } catch (Throwable $e) {
+            return null;
+        }
+
+        if (empty($notes)) {
+            return null;
+        }
+
+        $default_message = 'Order status changed from Pending payment to Failed.';
+
+        $pick_reason = function ($note) {
+            if (!$note) {
+                return null;
+            }
+            $content = method_exists($note, 'get_content') ? $note->get_content() : ($note->content ?? '');
+            $content = is_string($content) ? trim(wp_strip_all_tags($content)) : '';
+            return $content !== '' ? $content : null;
+        };
+
+        $first_reason = $pick_reason($notes[0] ?? null);
+        if ($first_reason && stripos($first_reason, $default_message) === false) {
+            return $first_reason;
+        }
+
+        $second_reason = $pick_reason($notes[1] ?? null);
+        return $second_reason ?: ($first_reason && stripos($first_reason, $default_message) === false ? $first_reason : null);
     }
 }

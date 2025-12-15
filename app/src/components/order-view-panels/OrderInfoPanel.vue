@@ -121,6 +121,26 @@
                                 </span>
                             </template>
                         </p>
+                        <div v-if="editingOrderInfo" style="margin-top: 12px">
+                            <strong>Update Meta:</strong>
+                            <div style="display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap">
+                                <n-input
+                                    v-model:value="editableOrderInfo.newMetaKey"
+                                    placeholder="Meta key (e.g. notes)"
+                                    style="max-width: 220px"
+                                    size="small"
+                                />
+                                <n-input
+                                    v-model:value="editableOrderInfo.newMetaValue"
+                                    placeholder="Meta value"
+                                    style="max-width: 260px"
+                                    size="small"
+                                />
+                                <span style="font-size: 12px; color: #6b7280">
+                                    Leave blank to skip. Existing keys are overwritten.
+                                </span>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Braintree column -->
@@ -561,6 +581,8 @@ const editableOrderInfo = ref({
     newOrReturning: "",
     replacementReason: "",
     chargebackAlert: "no",
+    newMetaKey: "",
+    newMetaValue: "",
     billing: {
         first_name: "",
         last_name: "",
@@ -670,6 +692,8 @@ watch(
         editableOrderInfo.value.newOrReturning = props.getMeta?.("new_or_returning") || "";
         editableOrderInfo.value.replacementReason = props.getMeta?.("replacement_reason") || "";
         editableOrderInfo.value.chargebackAlert = props.getMeta?.("chargeback_alert_received") || "no";
+        editableOrderInfo.value.newMetaKey = "";
+        editableOrderInfo.value.newMetaValue = "";
 
         billingKeys.forEach((key) => {
             const raw = val.billing?.[key] || "";
@@ -742,10 +766,14 @@ watch(selectedCustomer, (newVal) => {
 function enterEditOrderInfo() {
     editableOrderInfo.value.status = props.order.status;
     editableOrderInfo.value.newOrReturning = newOrReturning.value;
+    editableOrderInfo.value.newMetaKey = "";
+    editableOrderInfo.value.newMetaValue = "";
     editingOrderInfo.value = true;
 }
 
 function cancelEditOrderInfo() {
+    editableOrderInfo.value.newMetaKey = "";
+    editableOrderInfo.value.newMetaValue = "";
     editingOrderInfo.value = false;
 }
 
@@ -761,6 +789,11 @@ async function saveOrderInfo() {
         },
     };
 
+    const metaKey = editableOrderInfo.value.newMetaKey?.trim();
+    if (metaKey) {
+        payload.meta[metaKey] = editableOrderInfo.value.newMetaValue ?? "";
+    }
+
     try {
         await request({
             url: `${baseUrl}/${props.order.id}`,
@@ -770,6 +803,8 @@ async function saveOrderInfo() {
 
         message.success("Order updated");
         editingOrderInfo.value = false;
+        editableOrderInfo.value.newMetaKey = "";
+        editableOrderInfo.value.newMetaValue = "";
         emit("updateOrder");
     } catch (err) {
         message.error("Update failed");

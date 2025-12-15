@@ -63,7 +63,25 @@
                                 <div>
                                     <div style="display: flex; align-items: center; gap: 6px">
                                         <strong>{{ item.name }}</strong>
-                                        <n-tag v-if="isPPU(item)" size="small" type="warning" bordered>PPU</n-tag>
+                                        <n-space size="small" align="center">
+                                            <n-tag v-if="isPPU(item)" size="small" type="warning" bordered>PPU</n-tag>
+                                            <n-tag
+                                                v-if="isBundleAndSaveLineItem(item)"
+                                                size="small"
+                                                type="success"
+                                                bordered
+                                            >
+                                                BAS
+                                            </n-tag>
+                                            <n-tag
+                                                v-if="isCartSlideUpsellLineItem(item)"
+                                                size="small"
+                                                type="info"
+                                                bordered
+                                            >
+                                                CS
+                                            </n-tag>
+                                        </n-space>
                                     </div>
                                     <small v-if="item.sku">SKU: {{ item.sku }}</small>
                                 </div>
@@ -530,6 +548,19 @@
 
             <n-space size="small" style="margin-top: 1rem" v-if="!refundMode && !editMode">
                 <n-button
+                    v-if="
+                        showRetryPaymentButton &&
+                        ((props.sourceType !== 'replacement' && $can('edit_orders_items')) ||
+                            (props.sourceType === 'replacement' && $can('edit_replacement_orders')))
+                    "
+                    size="medium"
+                    type="primary"
+                    :loading="retryingPayment"
+                    @click="handleRetryPaymentClick"
+                >
+                    Retry Payment
+                </n-button>
+                <n-button
                     v-if="$can('refund_orders') && props.sourceType === 'order'"
                     size="medium"
                     type="default"
@@ -621,13 +652,15 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
-import { useMessage } from "naive-ui";
+import { computed, ref } from "vue";
+import { useMessage, useDialog } from "naive-ui";
 import { formatCurrency, setCurrency } from "@/utils/utils";
 import { useRefund } from "@/composables/useRefund";
+import { isBundleAndSaveLineItem, isCartSlideUpsellLineItem } from "@/composables/useOrder";
 import { useEdit } from "@/composables/useEdit";
 import { CloseCircleOutlined } from "@vicons/antd";
 import { formatOrderDate } from "@/utils/utils";
+import { request } from "@/utils/api";
 const props = defineProps({
     order: {
         type: Object,
@@ -642,8 +675,70 @@ const props = defineProps({
 });
 const emit = defineEmits(["updateOrder"]);
 const message = useMessage();
+const dialog = useDialog();
 
 const order = computed(() => props.order || {});
+
+const retryingPayment = ref(false);
+
+const isSubscriptionRenewal = computed(() => {
+    const meta = order.value?.meta_data || [];
+    return meta.some((entry) => entry.key === "_subscription_renewal" && entry.value);
+});
+
+const showRetryPaymentButton = computed(() => {
+    if (!isSubscriptionRenewal.value) return false;
+    const status = String(order.value?.status || "").toLowerCase();
+    return status === "pending" || status === "pending-payment";
+});
+
+async function retryPayment() {
+    if (retryingPayment.value) return;
+    retryingPayment.value = true;
+    try {
+        const response = await request({
+            url: `/orders/${props.orderId}/retry-payment`,
+            method: "POST",
+        });
+        if (response?.success) {
+            const baseMessage = response.message || "Payment retry triggered.";
+            const statusLabel = response.status_label;
+            message.success(statusLabel ? `${baseMessage} Current status: ${statusLabel}.` : baseMessage);
+            emit("updateOrder");
+        } else {
+            const errorMessage = response?.message || "Failed to trigger payment retry.";
+            message.error(errorMessage);
+        }
+    } catch (err) {
+        const errorMessage =
+            err?.body?.message || err?.body?.data?.message || err?.message || "Failed to trigger payment retry.";
+        message.error(errorMessage);
+    } finally {
+        retryingPayment.value = false;
+    }
+}
+
+function handleRetryPaymentClick() {
+    if (retryingPayment.value) return;
+    let dialogReactive;
+    dialogReactive = dialog.warning({
+        title: "Retry subscription payment?",
+        content:
+            "This will attempt to charge the customer again for this renewal. Make sure the customer is aware before proceeding.",
+        positiveText: "Retry Payment",
+        negativeText: "Cancel",
+        positiveButtonProps: {
+            type: "primary",
+        },
+        onPositiveClick() {
+            if (dialogReactive) dialogReactive.destroy();
+            retryPayment();
+        },
+        onClose() {
+            dialogReactive = null;
+        },
+    });
+}
 
 const shippingMethodOptions = [
     { id: "free_shipping:3", label: "Free Shipping", cost: 0 },
@@ -696,6 +791,7 @@ const {
     message,
     formatCurrency,
 });
+
 const {
     // State
     editMode, // ref: is edit mode active

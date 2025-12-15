@@ -62,6 +62,12 @@ class PFMP_REST_Subscriptions {
             'callback' => [$this, 'get_subscription_notes'],
             'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
         ]);
+
+        register_rest_route('pfm-panel/v1', '/orders/(?P<order_id>\d+)/retry-payment', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'retry_subscription_payment'],
+            'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
+        ]);
     }
 
     function get_subscription_notes(WP_REST_Request $request) {
@@ -493,172 +499,220 @@ class PFMP_REST_Subscriptions {
 
     public function update_subscription(WP_REST_Request $request) {
         $id = absint($request['id']);
-        if (!function_exists('wcs_get_subscription')) {
+
+        if (! function_exists('wcs_get_subscription')) {
             return new WP_Error('missing_wc_subs', 'WooCommerce Subscriptions is not installed.', ['status' => 500]);
         }
-        $sub = wcs_get_subscription($id);
 
-        if (!$sub) {
+        $sub = wcs_get_subscription($id);
+        if (! $sub) {
             return new WP_Error('not_found', 'Subscription not found', ['status' => 404]);
         }
 
         $current_user = wp_get_current_user();
-        $admin_name = $current_user->display_name ?? 'Admin';
-        $admin_roles = $current_user->roles ?? [];
+        $admin_name   = $current_user && ! empty($current_user->display_name) ? $current_user->display_name : 'Admin';
 
-        $params = $request->get_json_params();
+        $params         = $request->get_json_params();
         $updated_fields = [];
 
-        // Status
-        if (isset($params['status'])) {
-            $sub->update_status(sanitize_key($params['status']));
-            $updated_fields[] = "status";
+        // Are we cancelling in this call?
+        $target_status = isset($params['status']) ? sanitize_key($params['status']) : null;
+        $is_cancelling = ($target_status === 'cancelled');
+
+        // -----------------------------
+        // 1) UPDATE DATES & FIELDS FIRST
+        // -----------------------------
+
+        // Next payment date (ONLY if not cancelling in this same call)
+        if (! $is_cancelling && isset($params['next_payment_date']) && ! empty($params['next_payment_date'])) {
+            $next_payment_date_raw = $params['next_payment_date']; // Expected MySQL datetime 'Y-m-d H:i:s' in store TZ or GMT per your usage
+            try {
+                $sub->update_dates(['next_payment' => $next_payment_date_raw]);
+                $updated_fields[] = 'next_payment_date';
+            } catch (Throwable $e) {
+                return new WP_Error(
+                    'invalid_next_payment_date',
+                    'Failed to update next payment date: ' . $e->getMessage(),
+                    ['status' => 400]
+                );
+            }
         }
 
-        // Next payment date
-        if (isset($params['next_payment_date'])) {
-            $sub->update_dates(['next_payment' => $params['next_payment_date']]);
-            $updated_fields[] = "next_payment_date";
-        }
-
-        // Frequency
+        // Billing frequency changes
         $interval_changed = false;
-        $period_changed = false;
-        $old_interval = $sub->get_billing_interval();
-        $old_period = $sub->get_billing_period();
-        if (isset($params['billing_interval']) && is_numeric($params['billing_interval']) && intval($params['billing_interval']) !== intval($old_interval)) {
-            $sub->set_billing_interval(intval($params['billing_interval']));
-            $interval_changed = true;
-            $updated_fields[] = "billing_interval";
+        $period_changed   = false;
+        $old_interval     = (int) $sub->get_billing_interval();
+        $old_period       = $sub->get_billing_period();
+
+        if (isset($params['billing_interval']) && is_numeric($params['billing_interval'])) {
+            $new_interval_int = (int) $params['billing_interval'];
+            if ($new_interval_int !== $old_interval) {
+                $sub->set_billing_interval($new_interval_int);
+                $interval_changed = true;
+                $updated_fields[] = 'billing_interval';
+            }
         }
+
         if (isset($params['billing_period']) && $params['billing_period'] !== $old_period) {
             $sub->set_billing_period(sanitize_text_field($params['billing_period']));
             $period_changed = true;
-            $updated_fields[] = "billing_period";
+            $updated_fields[] = 'billing_period';
         }
-        // If frequency changed, recalculate the next payment date
-        if ($interval_changed || $period_changed) {
-            $new_interval = $sub->get_billing_interval();
-            $new_period = $sub->get_billing_period();
 
+        // If frequency changed, recalc next payment (ONLY if not cancelling in this call)
+        if (($interval_changed || $period_changed) && ! $is_cancelling) {
+            $new_interval = (int) $sub->get_billing_interval();
+            $new_period   = $sub->get_billing_period();
+
+            // Last order created time (UTC timestamp)
             $last_order_created = $sub->get_time('last_order_date_created');
-            if (!$last_order_created) {
-                $last_order_created = current_time('timestamp', 1); // now (UTC)
+            if (! $last_order_created) {
+                $last_order_created = current_time('timestamp', true); // now UTC
             }
-            $next_payment_date = wcs_add_time($new_interval, $new_period, $last_order_created);
-            if ($next_payment_date < time()) {
-                $next_payment_date = strtotime('+1 day');
+
+            // Compute next payment based on new cadence
+            $next_payment_ts = wcs_add_time($new_interval, $new_period, $last_order_created);
+
+            // Never set in the past
+            if ($next_payment_ts < time()) {
+                $next_payment_ts = strtotime('+1 day');
             }
-            $formatted_next_payment_date = date('Y-m-d H:i:s', $next_payment_date);
-            $sub->update_dates(['next_payment' => $formatted_next_payment_date]);
-            $updated_fields[] = "next_payment_date (recalculated)";
+
+            $formatted_next_payment_gmt = gmdate('Y-m-d H:i:s', $next_payment_ts);
+
+            try {
+                $sub->update_dates(['next_payment' => $formatted_next_payment_gmt]);
+                $updated_fields[] = 'next_payment_date (recalculated)';
+            } catch (Throwable $e) {
+                return new WP_Error(
+                    'invalid_recalc_next_payment_date',
+                    'Failed to recalc next payment date: ' . $e->getMessage(),
+                    ['status' => 400]
+                );
+            }
         }
 
-        // Meta (optional, if you use meta fields for subscriptions)
+        // Meta data (optional)
         if (isset($params['meta']) && is_array($params['meta'])) {
             foreach ($params['meta'] as $key => $value) {
-                $sub->update_meta_data(sanitize_text_field($key), sanitize_text_field($value));
+                $sub->update_meta_data(sanitize_text_field($key), is_scalar($value) ? sanitize_text_field($value) : wp_json_encode($value));
             }
-            $updated_fields[] = "meta";
+            $updated_fields[] = 'meta';
         }
 
-        // Billing updates
+        // Billing fields
         if (isset($params['billing']) && is_array($params['billing'])) {
             foreach ($params['billing'] as $key => $value) {
-                $setter = "set_billing_" . $key;
+                $setter = 'set_billing_' . $key;
                 if (method_exists($sub, $setter)) {
-                    $sub->$setter(sanitize_text_field($value));
-                    $updated_fields[] = "billing_{$key}";
-                }
-            }
-        }
-        // Shipping updates
-        if (isset($params['shipping']) && is_array($params['shipping'])) {
-            foreach ($params['shipping'] as $key => $value) {
-                $setter = "set_shipping_" . $key;
-                if (method_exists($sub, $setter)) {
-                    $sub->$setter(sanitize_text_field($value));
-                    $updated_fields[] = "shipping_{$key}";
+                    $sub->$setter(is_scalar($value) ? sanitize_text_field($value) : wp_json_encode($value));
+                    $updated_fields[] = 'billing_' . $key;
                 }
             }
         }
 
-        $updated_profile = false;
-        // Update customer profile if requested
-        if (!empty($params['update_customer_profile']) && $sub->get_user_id()) {
-            $user_id = $sub->get_user_id();
-            if (isset($params['billing'])) {
-                foreach ($params['billing'] as $key => $value) {
-                    update_user_meta($user_id, "billing_{$key}", sanitize_text_field($value));
+        // Shipping fields
+        if (isset($params['shipping']) && is_array($params['shipping'])) {
+            foreach ($params['shipping'] as $key => $value) {
+                $setter = 'set_shipping_' . $key;
+                if (method_exists($sub, $setter)) {
+                    $sub->$setter(is_scalar($value) ? sanitize_text_field($value) : wp_json_encode($value));
+                    $updated_fields[] = 'shipping_' . $key;
                 }
             }
-            if (isset($params['shipping'])) {
+        }
+
+        // Update customer profile from billing/shipping if requested
+        $updated_profile = false;
+        if (! empty($params['update_customer_profile']) && $sub->get_user_id()) {
+            $user_id = (int) $sub->get_user_id();
+            if (isset($params['billing']) && is_array($params['billing'])) {
+                foreach ($params['billing'] as $key => $value) {
+                    update_user_meta($user_id, 'billing_' . sanitize_key($key), is_scalar($value) ? sanitize_text_field($value) : wp_json_encode($value));
+                }
+            }
+            if (isset($params['shipping']) && is_array($params['shipping'])) {
                 foreach ($params['shipping'] as $key => $value) {
-                    update_user_meta($user_id, "shipping_{$key}", sanitize_text_field($value));
+                    update_user_meta($user_id, 'shipping_' . sanitize_key($key), is_scalar($value) ? sanitize_text_field($value) : wp_json_encode($value));
                 }
             }
             $updated_profile = true;
         }
 
-        // Update all user subscriptions if requested
-        if (
-            !empty($params['update_all_subscriptions']) &&
-            $sub->get_user_id() &&
-            (isset($params['billing']) || isset($params['shipping']))
-        ) {
-            $user_id = $sub->get_user_id();
-            $subscriptions = wcs_get_users_subscriptions($user_id); // array of subscriptions
-
+        // Propagate billing/shipping to ALL user subscriptions if requested
+        if (! empty($params['update_all_subscriptions']) && $sub->get_user_id() && (isset($params['billing']) || isset($params['shipping']))) {
+            $user_id        = (int) $sub->get_user_id();
+            $subscriptions  = wcs_get_users_subscriptions($user_id); // array of WC_Subscription
             foreach ($subscriptions as $other_sub_id => $other_sub) {
-                // Don't re-update the current subscription (already done above)
-                if ($other_sub_id == $sub->get_id()) continue;
-
+                if ((int) $other_sub_id === (int) $sub->get_id()) {
+                    continue; // current one already updated
+                }
                 if (isset($params['billing']) && is_array($params['billing'])) {
                     foreach ($params['billing'] as $key => $value) {
-                        $setter = "set_billing_" . $key;
+                        $setter = 'set_billing_' . $key;
                         if (method_exists($other_sub, $setter)) {
-                            $other_sub->$setter(sanitize_text_field($value));
+                            $other_sub->$setter(is_scalar($value) ? sanitize_text_field($value) : wp_json_encode($value));
                         }
                     }
                 }
                 if (isset($params['shipping']) && is_array($params['shipping'])) {
                     foreach ($params['shipping'] as $key => $value) {
-                        $setter = "set_shipping_" . $key;
+                        $setter = 'set_shipping_' . $key;
                         if (method_exists($other_sub, $setter)) {
-                            $other_sub->$setter(sanitize_text_field($value));
+                            $other_sub->$setter(is_scalar($value) ? sanitize_text_field($value) : wp_json_encode($value));
                         }
                     }
                 }
                 $other_sub->save();
-                $other_sub->add_order_note("Billing and/or shipping info updated via 'Update all user Subscriptions' option by $admin_name.");
+                $other_sub->add_order_note("Billing and/or shipping info updated via 'Update all user Subscriptions' option by {$admin_name}.");
             }
         }
 
+        // ----------------
+        // 2) STATUS LAST
+        // ----------------
+        if ($target_status) {
+
+            // If cancelling, drop next_payment_date (empty or not)
+            if ($is_cancelling && array_key_exists('next_payment_date', $params)) {
+                unset($params['next_payment_date']);
+                // optionally log a note instead of erroring:
+                $sub->add_order_note('Cancellation requested; ignored next_payment_date in payload.');
+            }
+
+            $sub->update_status($target_status);
+            $updated_fields[] = 'status';
+        }
+
+        // -------------
+        // SAVE & NOTES
+        // -------------
         try {
             $sub->save();
 
-            // Add a note summarizing updates
-            if (!empty($updated_fields)) {
-                $note = "<b>🔄 Subscription updated by $admin_name</b><br><br>";
-                $note .= '<b>Customer info updated</b><br>';
+            if (! empty($updated_fields)) {
+                $note  = "<b>🔄 Subscription updated by {$admin_name}</b><br><br>";
+                $note .= '<b>Fields:</b> ' . esc_html(implode(', ', $updated_fields)) . '<br>';
                 if ($updated_profile) {
-                    $note .= 'Changes applied to customer profile as well.<br>';
+                    $note .= 'Customer profile updated.<br>';
                 }
-                if (!empty($params['update_all_subscriptions'])) {
-                    $note .= 'All user subscriptions updated.<br>';
+                if (! empty($params['update_all_subscriptions'])) {
+                    $note .= 'Changes propagated to all user subscriptions.<br>';
                 }
                 $sub->add_order_note($note);
                 $sub->save();
+            }
 
+            if (class_exists('PFMP_Utils') && method_exists('PFMP_Utils', 'log_admin_action')) {
                 PFMP_Utils::log_admin_action(
                     'update',
                     'subscription',
                     sprintf(
-                        "Updated subscription #%d (fields: %s)%s%s",
+                        'Updated subscription #%d (fields: %s)%s%s',
                         $id,
                         $updated_fields ? implode(', ', $updated_fields) : 'none',
                         $updated_profile ? ' | updated customer profile' : '',
-                        !empty($params['update_all_subscriptions']) ? ' | propagated to all user subscriptions' : ''
+                        ! empty($params['update_all_subscriptions']) ? ' | propagated to all user subscriptions' : ''
                     )
                 );
             }
@@ -668,6 +722,7 @@ class PFMP_REST_Subscriptions {
             return new WP_Error('update_failed', $e->getMessage(), ['status' => 500]);
         }
     }
+
 
     public function get_filtered_subscriptions(WP_REST_Request $request) {
         $page     = max(1, $request['page']);
@@ -893,6 +948,66 @@ class PFMP_REST_Subscriptions {
         ];
     }
 
+
+    public function retry_subscription_payment(WP_REST_Request $request) {
+        $order_id = absint($request['order_id']);
+        if (!$order_id) {
+            return new WP_Error('invalid_order', 'Invalid order ID', ['status' => 400]);
+        }
+
+        $order = wc_get_order($order_id);
+        if (!$order) {
+            return new WP_Error('not_found', 'Order not found', ['status' => 404]);
+        }
+
+        $current_status = $order->get_status();
+        if ($current_status !== 'pending') {
+            return new WP_Error('invalid_status', 'Only pending payment renewal orders can be retried.', ['status' => 400]);
+        }
+
+        $is_renewal = false;
+        if (function_exists('wcs_order_contains_subscription')) {
+            $is_renewal = wcs_order_contains_subscription($order, ['order_type' => 'renewal']);
+        }
+        if (!$is_renewal) {
+            $is_renewal = (bool) $order->get_meta('_subscription_renewal');
+        }
+        if (!$is_renewal) {
+            return new WP_Error('not_subscription_renewal', 'Order is not a subscription renewal.', ['status' => 400]);
+        }
+
+        $current_user = wp_get_current_user();
+        $admin_name   = $current_user->display_name ?: 'Admin';
+
+        try {
+            /**
+             * WooCommerce Subscriptions registers this action to kick off the retry flow.
+             * See https://woocommerce.com/document/subscriptions/develop/failed-payment-retry/
+             */
+            do_action('woocommerce_order_action_wcs_retry_renewal_payment', $order);
+        } catch (Throwable $e) {
+            return new WP_Error('retry_failed', $e->getMessage(), ['status' => 500]);
+        }
+
+        $order->add_order_note(sprintf('🔁 Payment retry triggered via PFM Panel by %s.', $admin_name));
+        $order->save();
+
+        if (class_exists('PFMP_Utils') && method_exists('PFMP_Utils', 'log_admin_action')) {
+            PFMP_Utils::log_admin_action('retry_payment', 'order', "Payment retry triggered for order #{$order_id}");
+        }
+
+        $order = wc_get_order($order_id);
+        $status_slug  = $order ? $order->get_status() : $current_status;
+        $status_label = function_exists('wc_get_order_status_name') ? wc_get_order_status_name("wc-{$status_slug}") : $status_slug;
+
+        return rest_ensure_response([
+            'success'       => true,
+            'message'       => 'Payment retry triggered.',
+            'order_id'      => $order_id,
+            'order_status'  => $status_slug,
+            'status_label'  => $status_label,
+        ]);
+    }
 
     private function get_subscription_branch_for_subscription($sub) {
         $subscription_id = $sub->get_id();

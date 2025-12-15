@@ -281,7 +281,9 @@ const columns = computed(() => [
             const classes = [
                 "warehouse-export-tag",
                 `warehouse-${warehouse.toLowerCase()}`,
-                status === "exported" || status === "shipped"
+                status === "delivered"
+                    ? "warehouse-export-delivered"
+                    : status === "exported" || status === "shipped"
                     ? "warehouse-export-exported"
                     : status === "failed"
                     ? "warehouse-export-failed"
@@ -315,9 +317,11 @@ const columns = computed(() => [
                 failed: "warehouse-export-status-failed",
                 exported: "warehouse-export-status-exported",
                 shipped: "warehouse-export-status-shipped",
+                delivered: "warehouse-export-status-delivered",
             };
             const tagClass = mapping[status] || "warehouse-export-status-pending";
-            const label = status ? status.charAt(0).toUpperCase() + status.slice(1) : "—";
+            const label =
+                status === "delivered" ? "Delivered" : status ? status.charAt(0).toUpperCase() + status.slice(1) : "—";
 
             return h("span", { class: ["warehouse-export-status-tag", tagClass].join(" ") }, label);
         },

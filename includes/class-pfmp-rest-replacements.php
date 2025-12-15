@@ -2,6 +2,7 @@
 // class-pfmp-rest-replacements.php
 defined('ABSPATH') || exit;
 
+require_once plugin_dir_path(__FILE__) . '/class-pfmp-query-utils.php';
 
 class PFMP_REST_Replacements {
     public function __construct() {
@@ -22,6 +23,8 @@ class PFMP_REST_Replacements {
                 'addr_status'   => ['sanitize_callback' => 'sanitize_text_field'],
                 'date_from'     => ['sanitize_callback' => 'sanitize_text_field'],
                 'date_to'       => ['sanitize_callback' => 'sanitize_text_field'],
+                'search_type'   => ['sanitize_callback' => 'sanitize_text_field'],
+                'search_value'  => [],
             ],
         ]);
 
@@ -61,6 +64,12 @@ class PFMP_REST_Replacements {
             'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
         ]);
 
+        register_rest_route('pfm-panel/v1', '/replacements/(?P<id>\d+)/narvar-tracking-url', [
+            'methods'  => WP_REST_Server::READABLE,
+            'callback' => [$this, 'get_narvar_tracking_url'],
+            'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
+        ]);
+
         register_rest_route('pfm-panel/v1', '/replacements', [
             'methods'  => WP_REST_Server::CREATABLE,
             'callback' => [$this, 'create_replacement'],
@@ -70,6 +79,18 @@ class PFMP_REST_Replacements {
         register_rest_route('pfm-panel/v1', '/replacements/(?P<id>\d+)', [
             'methods'  => 'DELETE',
             'callback' => [$this, 'delete_replacement'],
+            'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
+        ]);
+
+        register_rest_route('pfm-panel/v1', '/replacements/reasons', [
+            'methods'  => WP_REST_Server::READABLE,
+            'callback' => [$this, 'get_replacement_reasons'],
+            'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
+        ]);
+
+        register_rest_route('pfm-panel/v1', '/replacements/creators', [
+            'methods'  => WP_REST_Server::READABLE,
+            'callback' => [$this, 'get_replacement_creators'],
             'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
         ]);
     }
@@ -87,13 +108,10 @@ class PFMP_REST_Replacements {
         $current_user = wp_get_current_user();
         $admin_name = $current_user->display_name ?? 'Admin';
 
-        PFMP_Utils::log("📥 Replacement creation initiated by {$admin_name}");
-
         try {
             $order_id = absint($request->get_param('order_id'));
 
             if ($order_id) {
-                PFMP_Utils::log("🔄 Creating replacement from WC Order ID: {$order_id}");
                 $replacement = wro_create_from_wc_order($order_id, $current_user->ID, false);
 
                 if (!$replacement) {
@@ -137,7 +155,6 @@ class PFMP_REST_Replacements {
             $replacement->add_note('Replacement order created by ' . $admin_name, $current_user->ID);
             $replacement->save();
 
-            PFMP_Utils::log("✅ Replacement created: ID " . $replacement->get_id());
             PFMP_Utils::log_admin_action('create', 'replacement', "Created replacement #{$replacement->get_id()}");
 
             return rest_ensure_response([
@@ -146,7 +163,6 @@ class PFMP_REST_Replacements {
                 'status'     => $replacement->status,
             ]);
         } catch (Throwable $e) {
-            PFMP_Utils::log("🔥 Replacement creation failed: " . $e->getMessage());
             return new WP_REST_Response([
                 'success' => false,
                 'message' => 'Error creating replacement: ' . $e->getMessage(),
@@ -319,6 +335,62 @@ class PFMP_REST_Replacements {
                 $response->header('X-WP-Total', 0);
                 $response->header('X-WP-TotalPages', 0);
                 return $response;
+            }
+        }
+
+
+
+        // --- Products search (fast, JSON-based on replacement_orders.items_json) ---
+        if (($request['search_type'] ?? null) === 'products' && !empty($request['search_value'])) {
+            $selected_ids = PFMP_Query_Utils::parse_product_ids($request['search_value']); // "7,616257" or [7,616257]
+            PFMP_Utils::log(['repl.products.parsed_ids' => $selected_ids]);
+
+            if (empty($selected_ids)) {
+                $r = rest_ensure_response([]);
+                $r->header('X-WP-Total', 0);
+                $r->header('X-WP-TotalPages', 0);
+                return $r;
+            }
+
+            // AND when 2+ selected; OR when 1 selected
+            $require_all = count($selected_ids) > 1;
+
+            // Optional filters that we’ll push down into SQL for speed
+            $filters = [
+                'status'        => $request['status']        ?? null,
+                'warehouse'     => $request['warehouse']     ?? null,
+                'export_status' => $request['export_status'] ?? null,
+                'addr_status'   => $request['addr_status']   ?? null,
+                'date_from'     => $request['date_from']     ?? null,
+                'date_to'       => $request['date_to']       ?? null,
+            ];
+
+            try {
+                $slice = PFMP_Query_Utils::get_replacement_ids_by_products_paginated(
+                    $selected_ids,
+                    $page,
+                    $per_page,
+                    $require_all,
+                    $filters
+                );
+
+                // Load & format replacements
+                $orders = [];
+                foreach ($slice['ids'] as $rid) {
+                    $o = new WRO_Replacement_Order((int)$rid);
+                    if ($o->id) {
+                        $orders[] = $this->format_replacement_order($o);
+                    }
+                }
+
+                $resp = rest_ensure_response($orders);
+                $resp->header('X-WP-Total', (int) $slice['total']);
+                $resp->header('X-WP-TotalPages', (int) ceil(((int)$slice['total']) / $per_page));
+                PFMP_Utils::log(['repl.products.done' => ['total' => (int)$slice['total'], 'page' => $page]]);
+                return $resp;
+            } catch (Throwable $e) {
+                PFMP_Utils::log(['repl.products.error' => $e->getMessage()]);
+                return new WP_Error('replacement_query_failed', 'Failed to fetch replacement orders.', ['status' => 500]);
             }
         }
 
@@ -807,7 +879,7 @@ class PFMP_REST_Replacements {
                     'replacement',
                     "Revalidated address on replacement #{$replacement_id}: " . (string)($result->message ?? 'OK')
                 );
-                
+
                 return new WP_REST_Response([
                     'success' => true,
                     'message' => $result->message,
@@ -826,6 +898,104 @@ class PFMP_REST_Replacements {
         }
     }
 
+    public function get_narvar_tracking_url(WP_REST_Request $request) {
+        $replacement_id = absint($request['id']);
+        if (!$replacement_id) {
+            return new WP_Error('invalid_replacement', 'Invalid replacement ID', ['status' => 400]);
+        }
+
+        $replacement = wro_get_order($replacement_id);
+        if (!$replacement || !$replacement->id) {
+            return new WP_Error('not_found', 'Replacement not found', ['status' => 404]);
+        }
+
+        if (!class_exists('Narvar_Tracking_Integration')) {
+            return new WP_Error('narvar_unavailable', 'Narvar integration not available', ['status' => 500]);
+        }
+
+        try {
+            $narvar_instance = Narvar_Tracking_Integration::instance();
+            if (!method_exists($narvar_instance, 'get_narvar_tracking_url')) {
+                return new WP_Error('method_unavailable', 'Narvar tracking URL method not available', ['status' => 500]);
+            }
+
+            $tracking_url = $narvar_instance->get_narvar_tracking_url($replacement_id);
+
+            if (empty($tracking_url)) {
+                return rest_ensure_response([
+                    'success' => false,
+                    'tracking_url' => null,
+                    'message' => 'No tracking URL available for this replacement',
+                ]);
+            }
+
+            return rest_ensure_response([
+                'success' => true,
+                'tracking_url' => $tracking_url,
+            ]);
+        } catch (Throwable $e) {
+            return new WP_Error('narvar_error', $e->getMessage(), ['status' => 500]);
+        }
+    }
+
+    public function get_replacement_reasons(WP_REST_Request $request) {
+        global $wpdb;
+
+        $table = $wpdb->prefix . 'replacement_orders';
+        $sql = "
+            SELECT DISTINCT JSON_UNQUOTE(JSON_EXTRACT(meta_json, '$.replacement_reason')) AS reason
+            FROM {$table}
+            WHERE JSON_EXTRACT(meta_json, '$.replacement_reason') IS NOT NULL
+              AND JSON_UNQUOTE(JSON_EXTRACT(meta_json, '$.replacement_reason')) <> ''
+            ORDER BY reason ASC
+        ";
+
+        $results = $wpdb->get_col($sql);
+        $reasons = array_values(array_filter(array_map('strval', $results ?? [])));
+
+        return rest_ensure_response($reasons);
+    }
+
+    public function get_replacement_creators(WP_REST_Request $request) {
+        global $wpdb;
+
+        $table = $wpdb->prefix . 'replacement_orders';
+        $ids = $wpdb->get_col("SELECT DISTINCT created_by FROM {$table} WHERE created_by IS NOT NULL AND created_by > 0");
+
+        if (empty($ids)) {
+            return rest_ensure_response([]);
+        }
+
+        $creators = [];
+        foreach ($ids as $raw_id) {
+            $user_id = absint($raw_id);
+            if (!$user_id) {
+                continue;
+            }
+
+            $user = get_userdata($user_id);
+            if (!$user) {
+                continue;
+            }
+
+            $name = trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? ''));
+            if ($name === '') {
+                $name = $user->display_name ?: $user->user_login;
+            }
+
+            $creators[] = [
+                'id'    => $user->ID,
+                'name'  => $name,
+                'email' => $user->user_email,
+            ];
+        }
+
+        usort($creators, function ($a, $b) {
+            return strcasecmp($a['name'] ?? '', $b['name'] ?? '');
+        });
+
+        return rest_ensure_response($creators);
+    }
 
     private function format_replacement_order($order) {
         $customer = get_userdata($order->customer_id);

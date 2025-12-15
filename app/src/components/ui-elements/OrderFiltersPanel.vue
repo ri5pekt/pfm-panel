@@ -41,23 +41,57 @@
 
         <div v-if="showSearch" class="filter-field">
             <n-text depth="3">Search Orders</n-text>
-            <div class="row">
+            <div class="row" style="display: flex; gap: 8px; align-items: flex-end">
+                <!-- Search type -->
                 <n-select
                     v-model:value="filters.search_type"
                     :options="searchTypeOptions"
                     placeholder="Search by"
                     clearable
-                    style="width: 130px"
+                    style="width: 160px"
                 />
-                <div v-if="filters.search_type" style="display: flex; gap: 6px">
+
+                <!-- VALUE: text input for order_id / customer_email -->
+                <template v-if="filters.search_type && filters.search_type !== 'products'">
                     <n-input
                         v-model:value="searchInput"
                         placeholder="Enter value"
-                        style="width: 150px"
+                        style="width: 220px"
                         @keyup.enter="emitSearch"
                     />
-                    <n-button size="small" type="primary" @click="emitSearch"> Search </n-button>
-                </div>
+                </template>
+
+                <!-- VALUE: product multi-select (lazy loaded) -->
+                <template v-else-if="filters.search_type === 'products'">
+                    <n-select
+                        v-model:value="selectedProductIds"
+                        :options="productOptions"
+                        :loading="productLoading"
+                        multiple
+                        tag
+                        filterable
+                        clearable
+                        placeholder="Select products…"
+                        style="min-width: 340px"
+                        :render-label="(opt) => (opt.renderLabel ? opt.renderLabel() : opt.label)"
+                        @focus="ensureProductsLoaded"
+                        @update:show="
+                            (open) => {
+                                if (open) ensureProductsLoaded();
+                            }
+                        "
+                    />
+                </template>
+                <!-- Search button -->
+                <n-button
+                    style="height: 34px"
+                    v-if="filters.search_type"
+                    size="small"
+                    type="primary"
+                    @click="emitSearch"
+                >
+                    Search
+                </n-button>
             </div>
         </div>
 
@@ -66,9 +100,10 @@
 </template>
 
 <script setup>
-import { reactive, ref, watch } from "vue";
+import { reactive, ref, watch, h } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import DateRangeFilter from "@/components/ui-elements/DateRangeFilter.vue";
+import { request } from "@/utils/api"; // <-- used for lazy product load
 
 // Props & Emits
 const props = defineProps({
@@ -85,22 +120,30 @@ const emit = defineEmits(["update:modelValue", "search"]);
 
 // Clone incoming props
 const filters = props.modelValue;
+
+// Local state for search input (text modes) and product selection (products mode)
 const searchInput = ref(filters.search_value ?? "");
+const selectedProductIds = ref(Array.isArray(filters.search_value) ? filters.search_value.map(Number) : []); // for products mode
 
 const { showStatus, showTags, showWarehouse, showExportStatus, showAddrStatus, showDate, showSearch } = props;
 
 const route = useRoute();
 const router = useRouter();
 function handleDateRange(range) {
-    console.log("Date range selected:", range);
     filters.date_from = range?.from || null;
     filters.date_to = range?.to || null;
     emit("update:modelValue", { ...filters });
 }
 
+// Emit unified search (shape depends on search_type)
 function emitSearch() {
-    // Only push the value to parent on explicit search
-    filters.search_value = (searchInput.value ?? "").trim();
+    if (filters.search_type === "products") {
+        // send Product ID array (numbers)
+        filters.search_value = selectedProductIds.value.map((v) => Number(v));
+    } else {
+        // send trimmed string
+        filters.search_value = (searchInput.value ?? "").trim();
+    }
     emit("update:modelValue", { ...filters });
     emit("search", { ...filters });
 }
@@ -133,6 +176,7 @@ const exportStatusOptions = [
     { label: "Exported", value: "exported" },
     { label: "Shipped", value: "shipped" },
     { label: "Exception", value: "shipment_exception" },
+    { label: "Delivered", value: "delivered" },
 ];
 
 const addrStatusOptions = [
@@ -154,23 +198,78 @@ const tagFilterOptions = [
     { label: "Subscription Parent", value: "subscription-parent" },
     { label: "BAS Added", value: "bas-added" },
     { label: "Hotjar", value: "hotjar" },
+    { label: "CS Added", value: "cs-added" },
 ];
 
+// ✨ Add "Products" type
 const searchTypeOptions = [
     { label: "Search by", value: null },
     { label: "Order ID", value: "order_id" },
     { label: "Customer Email", value: "customer_email" },
+    { label: "Products", value: "products" }, // NEW
 ];
 
+// ── Lazy product options for "Products" search ──
+const productOptions = ref([]);
+const productLoading = ref(false);
+let productsLoaded = false;
+
+async function ensureProductsLoaded() {
+    if (productsLoaded || filters.search_type !== "products") return;
+    productLoading.value = true;
+    try {
+        const res = await request({ url: "/products-by-category" });
+        productOptions.value = (res || []).map((group) => ({
+            type: "group",
+            label: group.label,
+            key: group.key,
+            children: (group.products || []).map((p) => ({
+                label: p.name,
+                value: p.id, // we search by SKU
+                sku: p.sku,
+                id: p.id,
+                price: p.price,
+                image: p.image,
+                renderLabel: () =>
+                    h("div", { style: "display:flex;align-items:center;gap:8px" }, [
+                        p.image
+                            ? h("img", {
+                                  src: p.image,
+                                  style: "width:18px;height:18px;object-fit:cover;border-radius:2px",
+                              })
+                            : null,
+                        h("span", `${p.name}`),
+                    ]),
+            })),
+        }));
+        productsLoaded = true;
+    } catch (e) {
+        console.error("Failed to load products", e);
+    } finally {
+        productLoading.value = false;
+    }
+}
+
+// Reset local inputs when search_type changes
 watch(
     () => filters.search_type,
     (newVal, oldVal) => {
-        if (newVal === null && oldVal !== null) {
-            // Reset both local and parent when type cleared
+        if (newVal === null) {
+            // cleared
             searchInput.value = "";
+            selectedProductIds.value = [];
             filters.search_value = null;
             emit("update:modelValue", { ...filters });
             emit("search", { ...filters });
+            return;
+        }
+
+        if (newVal === "products") {
+            // re-hydrate ID array
+            selectedProductIds.value = Array.isArray(filters.search_value) ? filters.search_value.map(Number) : [];
+        } else {
+            // switching to text-based mode
+            searchInput.value = typeof filters.search_value === "string" ? filters.search_value : "";
         }
     }
 );
@@ -186,6 +285,7 @@ function resetFilters() {
     filters.search_type = null;
     filters.search_value = null;
     searchInput.value = "";
+    selectedProductIds.value = [];
     emit("update:modelValue", { ...filters });
     emit("search", { ...filters });
 }

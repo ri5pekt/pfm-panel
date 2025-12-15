@@ -44,9 +44,15 @@
                     </p>
                     <p v-if="trackingNumber">
                         <strong>Tracking Number: </strong>
-                        <a :href="narvarTrackingUrl" target="_blank" rel="noopener">
-                            {{ trackingNumber }}
-                        </a>
+                        {{ trackingNumber }}
+                    </p>
+                    <p v-if="trackingNumber">
+                        <strong>Tracking URL: </strong>
+                        <span v-if="loadingNarvarUrl" style="display: inline-block; margin-left: 8px; vertical-align: middle; transform: scale(0.7)">
+                            <n-spin size="small" />
+                        </span>
+                        <a v-else-if="narvarTrackingUrl" :href="narvarTrackingUrl" target="_blank" rel="noopener noreferrer">View page</a>
+                        <span v-else style="color: #999">Not available</span>
                     </p>
 
                     <div v-if="$can('send_to_warehouse')" class="address-actions">
@@ -150,35 +156,6 @@ const baseUrl = computed(() =>
     props.sourceType === "replacement" ? `/replacements/${props.orderId}` : `/orders/${props.orderId}`
 );
 
-function getTrackingCarrier() {
-    // Same as $tracking_items = $order->get_meta('_wc_shipment_tracking_items', true);
-    const items = props.getMeta?.("_wc_shipment_tracking_items");
-    if (!items || !Array.isArray(items) || items.length === 0) return "Other";
-
-    const tracking = items[0];
-    if (!tracking) return "Other";
-
-    let carrier = tracking.tracking_provider || tracking.custom_tracking_provider || "Other";
-
-    // === Normalize to Narvar slugs (just like your PHP ===
-    if (carrier === "Amazon Shipping") carrier = "amazon";
-    if (carrier.toLowerCase().includes("dhl klb")) carrier = "dhlglobal";
-    if (carrier.toLowerCase().includes("dhl e")) carrier = "dhlglobal";
-    if (carrier.toLowerCase().includes("dhl")) carrier = "dhlglobal";
-    if (carrier.toLowerCase().includes("veho")) carrier = "veho"; // ← From your screenshot
-    if (carrier === "" || carrier === "Other") carrier = "other";
-
-    return carrier.toLowerCase();
-}
-
-const narvarTrackingUrl = computed(() => {
-    const tn = props.trackingNumber;
-    if (!tn) return null;
-
-    const carrier = getTrackingCarrier();
-    return `https://tracking.narvar.com/tracking/particleformen/${carrier}/?tracking_numbers=${encodeURIComponent(tn)}`;
-});
-
 watchEffect(() => {
     const meta = props.getMeta("warehouse_to_export");
     if (meta && meta !== "null" && meta !== "undefined") {
@@ -196,6 +173,7 @@ const exportStatusLabel = computed(() => {
             failed: "Failed",
             exported: "Exported",
             shipped: "Shipped",
+            delivered: "Delivered",
         }[status] || status
     );
 });
@@ -314,6 +292,10 @@ const forceValidateAddress = async () => {
 const timelineEvents = ref([]);
 const loadingTimeline = ref(false);
 
+const narvarTrackingUrl = ref(null);
+const loadingNarvarUrl = ref(false);
+const narvarUrlAttempted = ref(false);
+
 async function loadShipBobTimeline() {
     loadingTimeline.value = true;
 
@@ -339,6 +321,33 @@ async function loadShipBobTimeline() {
     }
 }
 
+async function loadNarvarTrackingUrl() {
+    if (!props.orderId || loadingNarvarUrl.value || narvarUrlAttempted.value) return;
+
+    loadingNarvarUrl.value = true;
+    narvarUrlAttempted.value = true;
+    try {
+        const endpoint = props.sourceType === "replacement"
+            ? `/replacements/${props.orderId}/narvar-tracking-url`
+            : `/orders/${props.orderId}/narvar-tracking-url`;
+
+        const response = await request({
+            url: endpoint,
+            method: "GET",
+        });
+
+        if (response?.success && response?.tracking_url) {
+            narvarTrackingUrl.value = response.tracking_url;
+        } else {
+            narvarTrackingUrl.value = null;
+        }
+    } catch (err) {
+        narvarTrackingUrl.value = null;
+    } finally {
+        loadingNarvarUrl.value = false;
+    }
+}
+
 watchEffect(() => {
     const toExport = props.getMeta("warehouse_to_export");
     const shipmentId = props.getMeta("warehouse_shipment_id");
@@ -350,6 +359,17 @@ watchEffect(() => {
     if (shouldLoad) {
         console.log("📦 Loading timeline now!");
         loadShipBobTimeline();
+    }
+});
+
+watchEffect(() => {
+    if (props.orderId && props.trackingNumber) {
+        if (!narvarUrlAttempted.value) {
+            loadNarvarTrackingUrl();
+        }
+    } else {
+        narvarUrlAttempted.value = false;
+        narvarTrackingUrl.value = null;
     }
 });
 </script>

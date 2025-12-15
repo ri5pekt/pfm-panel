@@ -188,3 +188,16 @@ export function useOrder(orderIdRef, sourceType = "order") {
         resendEmail,
     };
 }
+
+function hasLineItemMeta(item, key, value) {
+    if (!item || !Array.isArray(item.meta_data)) return false;
+    return item.meta_data.some((meta) => meta && meta.key === key && meta.value === value);
+}
+
+export function isCartSlideUpsellLineItem(item) {
+    return hasLineItemMeta(item, "_ref", "cart-sidebar");
+}
+
+export function isBundleAndSaveLineItem(item) {
+    return hasLineItemMeta(item, "_bump_page", "cart");
+}

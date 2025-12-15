@@ -48,7 +48,7 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch, h, reactive, computed } from "vue";
-import { NTag, useMessage, NCheckbox, c } from "naive-ui";
+import { NTag, useMessage, NCheckbox, c, NTooltip } from "naive-ui";
 import { useRouter, useRoute } from "vue-router";
 import { request } from "@/utils/api";
 
@@ -61,6 +61,9 @@ import OrderPreviewPopover from "@/components/ui-elements/OrderPreviewPopover.vu
 import JumpToOrderPanel from "@/components/ui-elements/JumpToOrderPanel.vue";
 import OrderStatusCountsPanel from "@/components/ui-elements/OrderStatusCountsPanel.vue";
 
+import mobileDeviceIcon from "@/assets/images/icons/device/mobile.svg";
+import desktopDeviceIcon from "@/assets/images/icons/device/desktop.svg";
+
 import { useIsMobile } from "@/composables/useIsMobile";
 
 const { isMobile } = useIsMobile();
@@ -68,6 +71,30 @@ const { isMobile } = useIsMobile();
 const orders = ref([]);
 
 const totalPages = ref(1);
+
+const flagImagesRaw = import.meta.glob("@/assets/images/icons/flags/*.png", {
+    eager: true,
+    import: "default",
+});
+
+const flagImages = Object.fromEntries(
+    Object.entries(flagImagesRaw)
+        .map(([path, src]) => {
+            const match = path.match(/\/([A-Z]{2})\.png$/i);
+            return match ? [match[1].toUpperCase(), src] : null;
+        })
+        .filter(Boolean)
+);
+const DEVICE_ICONS = {
+    mobile: mobileDeviceIcon,
+    desktop: desktopDeviceIcon,
+};
+function getDeviceIcon(row) {
+    const typeRaw = getMeta(row, "_wc_order_attribution_device_type");
+    if (!typeRaw) return null;
+    const key = typeRaw.toLowerCase();
+    return DEVICE_ICONS[key] || null;
+}
 
 const PER_PAGE_LS_KEY = "pfm.orders.perPage";
 const ALLOWED_PAGE_SIZES = [10, 20, 50, 100];
@@ -191,6 +218,77 @@ const columns = computed(() => {
             },
         },
         {
+            title: "Location",
+            key: "location",
+            render(row) {
+                const shipping = row.shipping || {};
+                const countryCode = (shipping.country || "").toUpperCase();
+                const isUS = countryCode === "US";
+                const primaryLabel = isUS ? (shipping.state || "").toUpperCase() : shipping.city || "";
+                const deviceTypeRaw = getMeta(row, "_wc_order_attribution_device_type");
+                const deviceIcon = getDeviceIcon(row);
+
+                const nodes = [];
+
+                const flagSrc = flagImages[countryCode];
+                if (flagSrc) {
+                    nodes.push(
+                        h("img", {
+                            src: flagSrc,
+                            alt: countryCode,
+                        })
+                    );
+                }
+
+                if (primaryLabel) {
+                    nodes.push(
+                        h(
+                            NTag,
+                            {
+                                size: "small",
+                                style: {
+                                    backgroundColor: "#fff",
+                                    color: "#374151",
+                                    border: "none",
+                                },
+                            },
+                            { default: () => primaryLabel }
+                        )
+                    );
+                }
+
+                if (deviceIcon) {
+                    nodes.push(
+                        h("img", {
+                            src: deviceIcon,
+                            alt: deviceTypeRaw || "Device",
+                            style: {
+                                width: "14px",
+                                height: "14px",
+                            },
+                            title: deviceTypeRaw || undefined,
+                        })
+                    );
+                }
+
+                if (nodes.length === 0) {
+                    nodes.push(h("span", { style: { color: "#9ca3af", fontSize: "0.85rem" } }, "—"));
+                }
+
+                return h(
+                    "div",
+                    {
+                        style: {
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                        },
+                    },
+                    nodes
+                );
+            },
+        },
+        {
             title: "Tags",
             key: "special_tags",
             render(row) {
@@ -221,8 +319,25 @@ const columns = computed(() => {
             title: "Status",
             key: "status",
             render(row) {
-                const status = row.status.charAt(0).toUpperCase() + row.status.slice(1);
-                return h("span", { class: `order-status ${row.status}` }, status);
+                const statusLabel = row.status.charAt(0).toUpperCase() + row.status.slice(1);
+                const statusNode = h("span", { class: `order-status ${row.status}` }, statusLabel);
+
+                if (row.status === "failed" && row.failed_reason) {
+                    return h(
+                        NTooltip,
+                        {
+                            trigger: "hover",
+                            placement: "top",
+                            delay: 100,
+                        },
+                        {
+                            trigger: () => statusNode,
+                            default: () => row.failed_reason,
+                        }
+                    );
+                }
+
+                return statusNode;
             },
         },
         {
@@ -255,7 +370,9 @@ const columns = computed(() => {
                 const classes = [
                     "warehouse-export-tag",
                     `warehouse-${warehouse.toLowerCase()}`,
-                    status === "exported" || status === "shipped"
+                    status === "delivered"
+                        ? "warehouse-export-delivered"
+                        : status === "exported" || status === "shipped"
                         ? "warehouse-export-exported"
                         : status === "failed"
                         ? "warehouse-export-failed"
@@ -290,11 +407,13 @@ const columns = computed(() => {
                     failed: "warehouse-export-status-failed",
                     exported: "warehouse-export-status-exported",
                     shipped: "warehouse-export-status-shipped",
+                    delivered: "warehouse-export-status-delivered",
                     shipment_exception: "warehouse-export-status-exception",
                 };
 
                 const labelMapping = {
                     shipment_exception: "Exception",
+                    delivered: "Delivered",
                 };
 
                 const tagClass = mapping[status] || "warehouse-export-status-pending";

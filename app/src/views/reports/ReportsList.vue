@@ -32,6 +32,11 @@ const reports = [
         description: "Detailed breakdown of all refunds processed in the system.",
     },
     {
+        key: "replacement-orders",
+        title: "Replacement Orders Report",
+        description: "CSV export of replacement orders filtered by product, reason, and warehouse.",
+    },
+    {
         key: "taxes-verification",
         title: "Taxes Verification Report",
         description: "Cross-check WooCommerce order totals and tax for verification. CSV export.",
@@ -45,6 +50,11 @@ const reports = [
         key: "export-to-narvar",
         title: "Export Orders to Narvar",
         description: "Generate a Narvar-ready export by date range or specific order IDs.",
+    },
+    {
+        key: "sale-tax-compare",
+        title: "Sale Tax Compare (file upload)",
+        description: "Upload a CSV file to compare WooCommerce and Braintree tax calculations. Output includes added tax columns.",
     },
 ];
 

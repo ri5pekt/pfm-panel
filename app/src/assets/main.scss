@@ -504,6 +504,9 @@ body {
 .warehouse-export-exported {
     background: #4caf50;
 }
+.warehouse-export-delivered {
+    background: #8b5cf6;
+}
 .warehouse-export-failed {
     background: #f44336;
 }
@@ -547,6 +550,9 @@ body {
 }
 .warehouse-export-status-shipped {
     background: #2196f3;
+}
+.warehouse-export-status-delivered {
+    background: #8b5cf6;
 }
 .warehouse-export-status-exception {
     background: #ff9800;

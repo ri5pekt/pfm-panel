@@ -11,6 +11,7 @@
     "@vuepic/vue-datepicker": "^11.0.2",
     "chart.js": "^4.4.9",
     "echarts": "^5.6.0",
+    "flag-icons": "^7.5.0",
     "naive-ui": "^2.41.0",
     "vue": "^3.4.15",
     "vue-chartjs": "^5.3.2",

@@ -36,6 +36,10 @@ class PFMP_REST_Reports {
                 require_once __DIR__ . '/reports/class-report-orders-to-priority.php';
                 $report = new PFMP_Report_Orders_To_Priority();
                 return $report->generate($data);
+            case 'replacement-orders':
+                require_once __DIR__ . '/reports/class-report-replacement-orders.php';
+                $report = new PFMP_Report_Replacement_Orders();
+                return $report->generate($data);
 
             case 'refunds':
                 require_once __DIR__ . '/reports/class-report-refunds.php';
@@ -55,6 +59,11 @@ class PFMP_REST_Reports {
             case 'export-to-narvar':
                 require_once __DIR__ . '/reports/class-report-export-to-narvar.php';
                 $report = new PFMP_Report_Export_To_Narvar();
+                return $report->generate($data);
+
+            case 'sale-tax-compare':
+                require_once __DIR__ . '/reports/class-report-sale-tax-compare.php';
+                $report = new PFMP_Report_Sale_Tax_Compare();
                 return $report->generate($data);
             default:
                 return new WP_Error('unsupported_report', 'Unsupported report type.', ['status' => 400]);
@@ -89,6 +98,16 @@ class PFMP_REST_Reports {
             $date_to         = $date_to ?: 'end';
             $filename_prefix = 'by-date';
             $filename_middle = "{$date_from}_to_{$date_to}";
+        }
+
+        // Add date and time to filename for sale-tax-compare reports
+        if ($type === 'sale-tax-compare') {
+            $date_time = date('Y-m-d_H-i-s');
+            if (!empty($filename_middle)) {
+                $filename_middle = "{$filename_middle}_{$date_time}";
+            } else {
+                $filename_middle = $date_time;
+            }
         }
 
         $wp_uploads = wp_upload_dir();
