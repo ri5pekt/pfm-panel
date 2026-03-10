@@ -28,9 +28,17 @@ export function useRefund({ order, orderId, emit, message, formatCurrency }) {
 
     const refundReason = ref("");
     const refundPercent = ref();
+    const skipWooRefund = ref(false);
+    const manualRefundAmount = ref(null); // optional override for Refund amount input
 
     const isBraintree = computed(() => !!order.value?.payment_method?.includes("braintree"));
+    const isBluesnap = computed(() => !!order.value?.payment_method?.includes("bluesnap"));
+    const isAfterpay = computed(() => !!order.value?.payment_method?.includes("afterpay"));
+
     const refundViaBraintree = ref(isBraintree.value);
+    const refundViaBluesnap = ref(isBluesnap.value);
+    const refundViaAfterpay = ref(isAfterpay.value);
+
     const userTouchedRefundVia = ref(false);
 
     watch(
@@ -38,6 +46,8 @@ export function useRefund({ order, orderId, emit, message, formatCurrency }) {
         () => {
             if (!userTouchedRefundVia.value && !refundMode.value) {
                 refundViaBraintree.value = isBraintree.value;
+                refundViaBluesnap.value = isBluesnap.value;
+                refundViaAfterpay.value = isAfterpay.value;
             }
         },
         { immediate: true }
@@ -45,6 +55,33 @@ export function useRefund({ order, orderId, emit, message, formatCurrency }) {
 
     watch(refundViaBraintree, () => {
         userTouchedRefundVia.value = true;
+    });
+
+    watch(refundViaBluesnap, () => {
+        userTouchedRefundVia.value = true;
+    });
+    watch(refundViaAfterpay, () => {
+        userTouchedRefundVia.value = true;
+    });
+
+    // Keep gateway toggles mutually exclusive (defensive; UI typically shows only one)
+    watch(refundViaBraintree, (val) => {
+        if (val) {
+            refundViaBluesnap.value = false;
+            refundViaAfterpay.value = false;
+        }
+    });
+    watch(refundViaBluesnap, (val) => {
+        if (val) {
+            refundViaBraintree.value = false;
+            refundViaAfterpay.value = false;
+        }
+    });
+    watch(refundViaAfterpay, (val) => {
+        if (val) {
+            refundViaBraintree.value = false;
+            refundViaBluesnap.value = false;
+        }
     });
 
     // Apply percent to all refund fields (line items, fees, shipping)
@@ -121,17 +158,37 @@ export function useRefund({ order, orderId, emit, message, formatCurrency }) {
         () => order.value?.line_items?.reduce((t, i) => t + +i.subtotal || 0, 0).toFixed(2) || "—"
     );
     const totalRefunded = computed(() => order.value?.refunds?.reduce((s, r) => s + Math.abs(+r.total || 0), 0) || 0);
-    const refundTotalAmount = computed(() => {
+    const calculatedRefundTotalAmount = computed(() => {
         const items = refundItems.value.reduce((s, r) => s + +r.total + +r.tax, 0);
         const fees = refundFees.value.reduce((s, f) => s + +f.total + +f.tax, 0);
         const ship = refundShipping.value.reduce((s, s2) => s + +s2.total + +s2.tax, 0);
         return items + fees + ship;
     });
+    const refundTotalAmount = computed(() => {
+        const v = manualRefundAmount.value;
+        if (v == null || v === "") return calculatedRefundTotalAmount.value;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : calculatedRefundTotalAmount.value;
+    });
+
+    // Allows the UI to show "calculated unless overridden" while still using v-model
+    const refundAmountInput = computed({
+        get() {
+            const v = manualRefundAmount.value;
+            if (v == null || v === "") return calculatedRefundTotalAmount.value;
+            const n = Number(v);
+            return Number.isFinite(n) ? n : calculatedRefundTotalAmount.value;
+        },
+        set(val) {
+            manualRefundAmount.value = val;
+        },
+    });
     const hasRefund = computed(
         () =>
             refundItems.value.some((i) => +i.quantity || +i.total || +i.tax) ||
             refundFees.value.some((f) => +f.total || +f.tax) ||
-            refundShipping.value.some((s) => +s.total || +s.tax)
+            refundShipping.value.some((s) => +s.total || +s.tax) ||
+            (skipWooRefund.value && refundTotalAmount.value > 0)
     );
 
     const totalAvailableToRefund = computed(() => {
@@ -146,6 +203,8 @@ export function useRefund({ order, orderId, emit, message, formatCurrency }) {
     // ── refund mode management ──
     function enterRefundMode() {
         refundMode.value = true;
+        skipWooRefund.value = false;
+        manualRefundAmount.value = null;
         refundItems.value = (order.value?.line_items || []).map((i) => ({
             id: i.id,
             quantity: 0,
@@ -169,6 +228,7 @@ export function useRefund({ order, orderId, emit, message, formatCurrency }) {
         refundItems.value = [];
         refundFees.value = [];
         refundShipping.value = [];
+        manualRefundAmount.value = null;
     }
 
     function onRefundQuantityChange(id, item) {
@@ -243,8 +303,11 @@ export function useRefund({ order, orderId, emit, message, formatCurrency }) {
             !pendingRefundFees.value.length &&
             !pendingRefundShipping.value.length
         ) {
-            message.warning("No items, fees, or shipping selected for refund");
-            return;
+            // Allow terminal-only refund when Woo refund is skipped and manual amount entered
+            if (!(skipWooRefund.value && refundTotalAmount.value > 0)) {
+                message.warning("No items, fees, or shipping selected for refund");
+                return;
+            }
         }
         showConfirmModal.value = true;
     }
@@ -266,6 +329,10 @@ export function useRefund({ order, orderId, emit, message, formatCurrency }) {
                 fees: pendingRefundFees.value,
                 shipping: pendingRefundShipping.value,
                 refund_via_braintree: isBraintree.value && refundViaBraintree.value ? 1 : 0,
+                refund_via_bluesnap: isBluesnap.value && refundViaBluesnap.value ? 1 : 0,
+                refund_via_afterpay: isAfterpay.value && refundViaAfterpay.value ? 1 : 0,
+                skip_woocommerce_refund: skipWooRefund.value ? 1 : 0,
+                ...(manualRefundAmount.value != null ? { manual_refund_amount: refundAmountInput.value } : {}),
                 reason: refundReason.value,
             };
             console.log("Refund payload:", payload);
@@ -274,6 +341,7 @@ export function useRefund({ order, orderId, emit, message, formatCurrency }) {
                 method: "POST",
                 body: payload,
                 raw: true, // manually parse response text
+                throwOnError: false,
             });
 
             const txt = await res.text();
@@ -314,6 +382,10 @@ export function useRefund({ order, orderId, emit, message, formatCurrency }) {
         pendingRefundFees,
         pendingRefundShipping,
         refundViaBraintree,
+        refundViaBluesnap,
+        refundViaAfterpay,
+        skipWooRefund,
+        refundAmountInput,
 
         getRefundItem,
         getRefundFee,
@@ -332,6 +404,7 @@ export function useRefund({ order, orderId, emit, message, formatCurrency }) {
 
         subtotal,
         totalRefunded,
+        calculatedRefundTotalAmount,
         refundTotalAmount,
         hasRefund,
         totalAvailableToRefund,

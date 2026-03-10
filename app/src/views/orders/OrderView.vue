@@ -2,7 +2,7 @@
 <template>
     <div class="order-view">
         <div class="page-top">
-            <n-button @click="router.back()">← Back to Orders</n-button>
+            <n-button @click="backToOrders">← Back to Orders</n-button>
             <div class="page-title">
                 Order #{{ props.id }}
                 <n-tag v-if="isArchived" type="warning" size="small" style="margin-left: 8px; vertical-align: middle">
@@ -14,7 +14,7 @@
                 <n-button v-if="!isArchived" @click="resendEmail('processing')"> Resend order email </n-button>
             </div>
         </div>
-        
+
         <div class="order-grid">
             <!-- Order Info Panel -->
             <OrderInfoPanel
@@ -68,6 +68,7 @@ import { useOrder } from "@/composables/useOrder";
 import { ref, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useMessage } from "naive-ui";
+import { useOrderWorkTabs } from "@/composables/useOrderWorkTabs";
 
 // Panles
 import OrderNotesPanel from "@/components/order-view-panels/OrderNotesPanel.vue";
@@ -105,4 +106,15 @@ function handleOrderUpdate() {
 const message = useMessage();
 const route = useRoute();
 const router = useRouter();
+
+const { closeTab, keyForOrderId, mainKey, setActiveKey } = useOrderWorkTabs();
+
+function backToOrders() {
+    // Close the current order work tab and return to the Orders main tab.
+    if (props.id) {
+        closeTab(keyForOrderId(props.id));
+    }
+    setActiveKey(mainKey());
+    router.push({ name: "orders" });
+}
 </script>

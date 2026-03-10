@@ -4,7 +4,23 @@ const CONSUMER_KEY = import.meta.env.VITE_WC_CONSUMER_KEY;
 const CONSUMER_SECRET = import.meta.env.VITE_WC_CONSUMER_SECRET;
 
 export const authHeader = "Basic " + btoa(`${CONSUMER_KEY}:${CONSUMER_SECRET}`);
-export const apiBase = API_URL;
+
+function joinUrl(base, path) {
+    const b = String(base || "").replace(/\/+$/, "");
+    const p = String(path || "").replace(/^\/+/, "");
+    if (!b) return `/${p}`;
+    if (!p) return `${b}/`;
+    return `${b}/${p}`;
+}
+
+function getApiBase() {
+    const isDev = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+    // In WP admin we always have PFMPanelData.restUrl (rest_url('pfm-panel/v1/'))
+    if (!isDev && window?.PFMPanelData?.restUrl) return window.PFMPanelData.restUrl;
+    return API_URL;
+}
+
+export const apiBase = getApiBase();
 
 export async function request({
     url,
@@ -13,9 +29,10 @@ export async function request({
     useCustomApi = true, // (kept for compat, not used)
     headers = {},
     raw = false,
+    throwOnError = true,
     params = null,
 }) {
-    let fullUrl = `${apiBase}${url}`;
+    let fullUrl = joinUrl(apiBase, url);
 
     if (params && method.toUpperCase() === "GET") {
         const qs = new URLSearchParams(params).toString();
@@ -47,7 +64,12 @@ export async function request({
     }
 
     if (!res.ok) {
-        const err = new Error(`Request failed: ${res.status} - ${text}`);
+        if (!throwOnError) {
+            return new Response(text, { status: res.status, headers: res.headers });
+        }
+
+        const pretty = data?.error || data?.message || text || "Request failed";
+        const err = new Error(`Request failed: ${res.status} - ${pretty}`);
         err.status = res.status;
         err.body = data; // parsed JSON if available
         err.bodyText = text; // raw text fallback

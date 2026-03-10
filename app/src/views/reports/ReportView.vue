@@ -25,6 +25,8 @@ import NarvarExportPanel from "@/components/reports-panels/NarvarExportPanel.vue
 import RefundsVerificationPanel from "@/components/reports-panels/RefundsVerificationPanel.vue";
 import ReplacementOrdersPanel from "@/components/reports-panels/ReplacementOrdersPanel.vue";
 import SaleTaxComparePanel from "@/components/reports-panels/SaleTaxComparePanel.vue";
+import WarehouseExportReportPanel from "@/components/reports-panels/WarehouseExportReportPanel.vue";
+import AdminActivityReportPanel from "@/components/reports-panels/AdminActivityReportPanel.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -60,6 +62,14 @@ const reportMap = {
     "sale-tax-compare": {
         title: "Sale Tax Compare (file upload)",
         component: SaleTaxComparePanel,
+    },
+    "warehouse-export": {
+        title: "Warehouse Export Report",
+        component: WarehouseExportReportPanel,
+    },
+    "admin-activity": {
+        title: "Admin Activity Report",
+        component: AdminActivityReportPanel,
     },
 };
 

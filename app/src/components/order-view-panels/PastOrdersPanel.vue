@@ -13,10 +13,11 @@
 
 <script setup>
 import { ref, watch, h } from "vue";
-import { RouterLink } from "vue-router";
+import { useRouter } from "vue-router";
 import { NTag, NTooltip } from "naive-ui";
 import { formatOrderDate, formatCurrency } from "@/utils/utils";
 import { request } from "@/utils/api";
+import { useOrderWorkTabs } from "@/composables/useOrderWorkTabs";
 
 const props = defineProps({
     customerId: Number,
@@ -27,6 +28,8 @@ const pastOrders = ref([]);
 const page = ref(1);
 const hasMore = ref(true);
 const loading = ref(false);
+const router = useRouter();
+const { openOrder: openOrderTab } = useOrderWorkTabs();
 
 const tag = (label, type = "default") =>
     h(NTag, { type, size: "small", style: "margin-left: 8px; vertical-align: middle" }, { default: () => label });
@@ -74,7 +77,25 @@ const columns = [
                       query: row.is_archived ? { is_archived: 1 } : undefined,
                   };
 
-            const children = [h(RouterLink, { to }, { default: () => `#${row.id}` })];
+            const href = router.resolve(to).href;
+
+            const children = [
+                h(
+                    "a",
+                    {
+                        href,
+                        style: "text-decoration: underline;",
+                        onClick: (e) => {
+                            e.preventDefault();
+                            if (!row.is_replacement) {
+                                openOrderTab(row.id);
+                            }
+                            router.push(to);
+                        },
+                    },
+                    `#${row.id}`
+                ),
+            ];
             if (row.is_archived) children.push(tag("Archived", "warning"));
             if (row.is_replacement) children.push(tag("Replacement", "info"));
             if (row.has_chargeback || (row.disputed_amount && Number(row.disputed_amount) > 0)) {

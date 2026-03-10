@@ -2,7 +2,7 @@
 <template>
     <div class="customer-view">
         <div class="page-top">
-            <n-button @click="router.back()">← Back to Customers</n-button>
+            <n-button @click="backToCustomers">← Back to Customers</n-button>
             <div class="page-title">
                 {{ fullName || "Loading..." }}
             </div>
@@ -18,10 +18,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { ref, onMounted, computed, watch } from "vue";
+import { useRouter } from "vue-router";
 import { useMessage } from "naive-ui";
 import { request } from "@/utils/api";
+import { useCustomerWorkTabs } from "@/composables/useCustomerWorkTabs";
 
 // Panels (create these as needed)
 import CustomerInfoPanel from "@/components/customer-view-panels/CustomerInfoPanel.vue";
@@ -29,11 +30,16 @@ import PastOrdersPanel from "@/components/order-view-panels/PastOrdersPanel.vue"
 import CustomerSubscriptionsPanel from "@/components/customer-view-panels/CustomerSubscriptionsPanel.vue";
 import YotpoPanel from "@/components/customer-view-panels/YotpoPanel.vue";
 
-const route = useRoute();
+const props = defineProps({
+    id: String,
+});
+
 const router = useRouter();
 const message = useMessage();
 
-const customerId = computed(() => Number(route.params.id));
+const { closeTab, keyForCustomerId, mainKey, setActiveKey } = useCustomerWorkTabs();
+
+const customerId = computed(() => Number(props.id));
 
 const customer = ref(null);
 const loading = ref(false);
@@ -41,10 +47,14 @@ const loading = ref(false);
 async function fetchCustomer() {
     loading.value = true;
     try {
-        customer.value = await request({
+        console.log("🔍 Fetching customer with ID:", customerId.value);
+        const json = await request({
             url: `/customers/${customerId.value}`,
             method: "GET",
         });
+        customer.value = json;
+        console.log("✅ Customer loaded:", json);
+        console.log("🧩 Customer meta:", json?.meta_data ?? json?.meta ?? null);
     } catch (err) {
         message.error("Failed to load customer");
         console.error(err);
@@ -63,4 +73,19 @@ const fullName = computed(() => {
 onMounted(() => {
     fetchCustomer();
 });
+
+// Reactively re-fetch when customer ID changes (e.g. navigating between /customers/:id routes)
+watch(
+    customerId,
+    () => {
+        fetchCustomer();
+    },
+    { immediate: false }
+);
+
+function backToCustomers() {
+    if (props.id) closeTab(keyForCustomerId(props.id));
+    setActiveKey(mainKey());
+    router.push({ name: "customers" });
+}
 </script>

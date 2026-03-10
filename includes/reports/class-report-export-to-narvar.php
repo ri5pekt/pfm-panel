@@ -119,6 +119,7 @@ class PFMP_Report_Export_To_Narvar {
 
                 if ($carrier === 'Amazon Shipping')  $carrier = 'amazon';
                 if (stripos($carrier, 'DHL KLB') !== false)  $carrier = 'dhlglobal';
+                if ($carrier === 'CirroECommerce') $carrier = 'cirro';
 
                 $tracking_number = $tracking['tracking_number'] ?? '';
                 $ship_date = !empty($tracking['date_shipped'])

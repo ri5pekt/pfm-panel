@@ -74,7 +74,6 @@ class PFMP_Admin {
             ) {
                 $target_id = intval($_GET['id']);
                 $redirect_url = admin_url("admin.php?page=pfm-panel#/orders/{$target_id}");
-                PFMP_Utils::log("Redirecting to {$redirect_url}");
 
                 $already_redirected = true;
                 wp_redirect($redirect_url);
@@ -663,14 +662,19 @@ class PFMP_Admin {
 
         $nonce = wp_create_nonce('wp_rest');
 
+        $js_path  = plugin_dir_path(dirname(__FILE__)) . 'dist/assets/app.js';
+        $css_path = plugin_dir_path(__FILE__) . 'dist/assets/app.css';
+
+        $js_ver  = file_exists($js_path)  ? filemtime($js_path)  : null;
+        $css_ver = file_exists($css_path) ? filemtime($css_path) : null;
+
         wp_enqueue_script(
             'pfm-panel-js',
             plugin_dir_url(dirname(__FILE__)) . 'dist/assets/app.js',
             [],
-            filemtime(plugin_dir_url(dirname(__FILE__)) . 'dist/assets/app.js'),
+            $js_ver,
             true
         );
-
 
         wp_localize_script('pfm-panel-js', 'PFMPanelData', [
             'restUrl' => rest_url('pfm-panel/v1/'),
@@ -682,7 +686,7 @@ class PFMP_Admin {
             'pfm-panel-css',
             plugin_dir_url(__FILE__) . 'dist/assets/app.css',
             [],
-            filemtime(plugin_dir_url(dirname(__FILE__)) . 'dist/assets/app.css')
+            $css_ver
         );
     }
 }

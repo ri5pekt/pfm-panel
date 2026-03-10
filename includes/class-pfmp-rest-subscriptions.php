@@ -141,24 +141,46 @@ class PFMP_REST_Subscriptions {
         try {
             switch ($action) {
                 case 'process_renewal': {
-                        // same as before, but with logging
                         $order = wcs_create_renewal_order($subscription);
+
+                        if ( is_wp_error( $order ) ) {
+                            return new WP_REST_Response([
+                                'success' => false,
+                                'message' => $order->get_error_message(),
+                            ], 400);
+                        }
+
+                        $payment_result = 'pending';
+
+                        if ( ! $subscription->is_manual() ) {
+                            $gateway = wc_get_payment_gateway_by_order( $subscription );
+                            if ( $gateway ) {
+                                $order->set_payment_method( $gateway );
+                                $order->save();
+                                do_action( 'woocommerce_scheduled_subscription_payment_' . $gateway->id, $order->get_total(), $order );
+                                $payment_result = $order->get_status();
+                            } else {
+                                $payment_result = 'no_gateway';
+                            }
+                        }
 
                         PFMP_Utils::log_admin_action(
                             'action',
                             'subscription',
                             sprintf(
-                                "Processed '%s' for subscription #%d by %s%s",
+                                "Processed '%s' for subscription #%d by %s%s | payment_result: %s",
                                 $action,
                                 $id,
                                 $admin_name,
-                                ($order && $order->get_id()) ? " | renewal order #" . $order->get_id() : ""
+                                $order->get_id() ? " | renewal order #" . $order->get_id() : "",
+                                $payment_result
                             )
                         );
 
                         return new WP_REST_Response([
-                            'success'  => true,
-                            'order_id' => $order ? $order->get_id() : null,
+                            'success'        => true,
+                            'order_id'       => $order->get_id(),
+                            'payment_result' => $payment_result,
                         ]);
                     }
 

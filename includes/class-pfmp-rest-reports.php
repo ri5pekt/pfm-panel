@@ -65,6 +65,16 @@ class PFMP_REST_Reports {
                 require_once __DIR__ . '/reports/class-report-sale-tax-compare.php';
                 $report = new PFMP_Report_Sale_Tax_Compare();
                 return $report->generate($data);
+
+            case 'warehouse-export':
+                require_once __DIR__ . '/reports/class-report-warehouse-export.php';
+                $report = new PFMP_Report_Warehouse_Export();
+                return $report->generate($data);
+
+            case 'admin-activity':
+                require_once __DIR__ . '/reports/class-report-admin-activity.php';
+                $report = new PFMP_Report_Admin_Activity();
+                return $report->generate($data);
             default:
                 return new WP_Error('unsupported_report', 'Unsupported report type.', ['status' => 400]);
         }

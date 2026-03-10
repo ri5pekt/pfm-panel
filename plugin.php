@@ -14,6 +14,7 @@ defined('ABSPATH') || exit;
 
 require_once plugin_dir_path(__FILE__) . 'includes/class-pfm-panel-plugin.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-pfmp-rest-orders.php';
+require_once plugin_dir_path(__FILE__) . 'includes/class-pfmp-rest-refunds.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-pfmp-rest-stats.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-pfmp-rest-subscriptions.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-pfmp-rest-customers.php';

@@ -23,6 +23,8 @@ export default defineConfig({
     build: {
         outDir: path.resolve(__dirname, "../dist"),
         emptyOutDir: true,
+        // Inline all assets smaller than 100KB (includes all SVG logos)
+        assetsInlineLimit: 102400, // 100KB in bytes
         rollupOptions: {
             input: path.resolve(__dirname, "index.html"),
             output: {

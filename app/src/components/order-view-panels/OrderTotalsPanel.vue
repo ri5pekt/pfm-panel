@@ -596,10 +596,27 @@
                     </div>
                 </div>
                 <div><strong>Total available to refund:</strong> {{ formatCurrency(totalAvailableToRefund) }}</div>
-                <div><strong>Refund amount:</strong> {{ formatCurrency(refundTotalAmount) }}</div>
+                <div style="display: flex; gap: 10px; align-items: center">
+                    <div><strong>Refund amount:</strong></div>
+                    <n-input-number
+                        v-model:value="refundAmountInput"
+                        :min="0"
+                        :step="0.01"
+                        size="small"
+                        style="width: 140px"
+                    />
+                </div>
 
                 <n-checkbox v-if="order.payment_method?.includes('braintree')" v-model:checked="refundViaBraintree">
                     Refund via Braintree
+                </n-checkbox>
+
+                <n-checkbox v-if="order.payment_method?.includes('bluesnap')" v-model:checked="refundViaBluesnap">
+                    Refund via BlueSnap
+                </n-checkbox>
+
+                <n-checkbox v-if="order.payment_method?.includes('afterpay')" v-model:checked="refundViaAfterpay">
+                    Refund via Afterpay
                 </n-checkbox>
 
                 <!-- 📝 Refund Reason -->
@@ -611,6 +628,10 @@
                         :autosize="{ minRows: 2, maxRows: 4 }"
                     />
                 </div>
+
+                <n-checkbox v-model:checked="skipWooRefund">
+                    Do not refund in WooCommerce
+                </n-checkbox>
 
                 <n-space style="margin-top: 1rem">
                     <n-button
@@ -758,6 +779,10 @@ const {
     pendingRefundFees,
     pendingRefundShipping,
     refundViaBraintree,
+    refundViaBluesnap,
+    refundViaAfterpay,
+    skipWooRefund,
+    refundAmountInput,
     refundReason,
 
     getRefundItem,

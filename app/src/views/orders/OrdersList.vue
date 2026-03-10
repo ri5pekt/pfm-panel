@@ -51,10 +51,12 @@ import { ref, onMounted, onBeforeUnmount, watch, h, reactive, computed } from "v
 import { NTag, useMessage, NCheckbox, c, NTooltip } from "naive-ui";
 import { useRouter, useRoute } from "vue-router";
 import { request } from "@/utils/api";
+import { useOrderWorkTabs } from "@/composables/useOrderWorkTabs";
 
 import { formatCurrency } from "@/utils/utils";
 import { formatOrderDate } from "@/utils/utils";
 import { getSpecialTags } from "@/utils/orderTags";
+import { getPaymentMethodLogo } from "@/utils/paymentMethod";
 import OrderFiltersPanel from "@/components/ui-elements/OrderFiltersPanel.vue";
 import BulkEditPanel from "@/components/ui-elements/BulkEditPanel.vue";
 import OrderPreviewPopover from "@/components/ui-elements/OrderPreviewPopover.vue";
@@ -120,6 +122,7 @@ const loading = ref(false);
 
 const router = useRouter();
 const route = useRoute();
+const { openOrder: openOrderTab } = useOrderWorkTabs();
 const message = useMessage();
 
 const page = ref(1);
@@ -214,6 +217,32 @@ const columns = computed(() => {
                                 h("span", null, name),
                             ]),
                     }
+                );
+            },
+        },
+        /* ── Customer Type column ───────────────────────────── */
+        {
+            title: "New/Returning",
+            key: "customer_type",
+            render(row) {
+                const customerType = getMeta(row, "new_or_returning");
+                // Default to "new" if meta is not found
+                const isNew = !customerType || customerType === "new";
+                const type = isNew ? "New" : "Returning";
+
+                return h(
+                    NTag,
+                    {
+                        size: "small",
+                        type: isNew ? "success" : "info",
+                        round: true,
+                        style: {
+                            backgroundColor: isNew ? "#f0fdf4" : "#eff6ff",
+                            color: isNew ? "#18a058" : "#2080f0",
+                            border: isNew ? "1px solid #18a058" : "1px solid #2080f0",
+                        },
+                    },
+                    { default: () => type }
                 );
             },
         },
@@ -345,6 +374,53 @@ const columns = computed(() => {
             key: "total",
             render(row) {
                 return formatCurrency(row.total, row.currency);
+            },
+        },
+        /* ── Payment Method column ───────────────────────────── */
+        {
+            title: "Payment",
+            key: "payment_method",
+            width: 80,
+            render(row) {
+                const { logoUrl, altText } = getPaymentMethodLogo(row);
+                const cardDetails = getMeta(row, '_braintree_card_details') || {};
+                const last4 = cardDetails.last4 || '';
+                const expMonth = cardDetails.expirationMonth || '';
+                const expYear = cardDetails.expirationYear || '';
+
+                const imgNode = h("img", {
+                    src: logoUrl,
+                    alt: altText,
+                    style: {
+                        height: "20px",
+                        width: "auto",
+                        maxWidth: "40px",
+                        objectFit: "contain",
+                    },
+                });
+
+                // If we have card details, wrap in tooltip
+                if (last4 || expMonth) {
+                    const tooltipText = [
+                        altText,
+                        last4 ? `••••${last4}` : null,
+                        (expMonth && expYear) ? `Exp: ${expMonth}/${expYear}` : null
+                    ].filter(Boolean).join('\n');
+
+                    return h(
+                        NTooltip,
+                        {
+                            trigger: "hover",
+                            placement: "top",
+                        },
+                        {
+                            trigger: () => imgNode,
+                            default: () => h("div", { style: { whiteSpace: "pre-line" } }, tooltipText),
+                        }
+                    );
+                }
+
+                return imgNode;
             },
         },
         // WAREHOUSE  🔵
@@ -504,9 +580,12 @@ function rowProps(row) {
             }
         },
         onContextmenu: (e) => {
-            e.preventDefault(); // prevent browser menu
+            // Right-click should open a real browser tab (not an internal tab)
+            e.preventDefault();
             if (!showCheckboxes.value) {
-                openOrder(row, { ...e, metaKey: true });
+                const loc = { name: "order-view", params: { id: row.id } };
+                const href = router.resolve(loc).href;
+                window.open(href, "_blank", "noopener");
             }
         },
     };
@@ -517,11 +596,22 @@ function openOrder(row, e) {
     const loc = { name: "order-view", params: { id: row.id } };
     const href = router.resolve(loc).href; // for window.open / <a> (e.g. "#/orders/123")
 
-    if (e?.metaKey || e?.ctrlKey || e?.button === 1) {
+    // Orders should behave like browser tabs:
+    // - Ctrl/Cmd/middle-click: open a *background* internal tab (stay on list)
+    // - Plain click: open and navigate to the order (activate tab)
+    // Escape hatch: Shift-click opens a real browser tab.
+    if (e?.shiftKey) {
         window.open(href, "_blank", "noopener");
-    } else {
-        router.push(loc); // ✅ push the location, not the href string
+        return;
     }
+
+    if (e?.metaKey || e?.ctrlKey || e?.button === 1) {
+        openOrderTab(row.id, { activate: false });
+        return;
+    }
+
+    openOrderTab(row.id, { activate: true });
+    router.push(loc); // ✅ push the location, not the href string
 }
 
 async function fetchOrders(currentPage = 1) {

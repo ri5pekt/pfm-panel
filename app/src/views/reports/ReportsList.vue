@@ -56,6 +56,16 @@ const reports = [
         title: "Sale Tax Compare (file upload)",
         description: "Upload a CSV file to compare WooCommerce and Braintree tax calculations. Output includes added tax columns.",
     },
+    {
+        key: "warehouse-export",
+        title: "Warehouse Export Report",
+        description: "Export orders by warehouse with gross sales, tax, and shipping information in USD and original currency.",
+    },
+    {
+        key: "admin-activity",
+        title: "Admin Activity Report",
+        description: "Export admin activity logs filtered by date range, action type, and admin name.",
+    },
 ];
 
 function goToReport(key) {

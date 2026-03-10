@@ -54,10 +54,12 @@ import { useRouter, useRoute } from "vue-router";
 import { request } from "@/utils/api";
 import { formatOrderDate } from "@/utils/utils";
 import OrderFiltersPanel from "@/components/ui-elements/OrderFiltersPanel.vue";
+import { useReplacementWorkTabs } from "@/composables/useReplacementWorkTabs";
 
 const router = useRouter();
 const route = useRoute();
 const message = useMessage();
+const { openReplacement: openReplacementTab } = useReplacementWorkTabs();
 
 const orders = ref([]);
 const loading = ref(false);
@@ -152,9 +154,11 @@ function rowProps(row) {
             }
         },
         onContextmenu: (e) => {
-            // right-click → open in new tab
-            e.preventDefault(); // remove if you want the browser menu to show
-            openReplacement(row, { ...e, metaKey: true }); // reuse logic → opens _blank
+            // Right-click should open a real browser tab (not an internal tab)
+            e.preventDefault();
+            const loc = { name: "replacement-view", params: { id: row.id } };
+            const href = router.resolve(loc).href;
+            window.open(href, "_blank", "noopener");
         },
         tabindex: 0,
         role: "link",
@@ -168,11 +172,22 @@ function openReplacement(row, e) {
     const loc = { name: "replacement-view", params: { id: row.id } };
     const href = router.resolve(loc).href; // e.g. "#/replacements/123" with hash history
 
-    if (e?.metaKey || e?.ctrlKey || e?.button === 1) {
+    // Match Orders behavior: internal SPA tabs by default.
+    // - Ctrl/Cmd/middle-click: open background internal tab (stay on list)
+    // - Plain click: open and navigate (activate)
+    // - Shift-click: open real browser tab (escape hatch)
+    if (e?.shiftKey) {
         window.open(href, "_blank", "noopener");
-    } else {
-        router.push(loc);
+        return;
     }
+
+    if (e?.metaKey || e?.ctrlKey || e?.button === 1) {
+        openReplacementTab(row.id, { activate: false });
+        return;
+    }
+
+    openReplacementTab(row.id, { activate: true });
+    router.push(loc);
 }
 
 async function fetchReplacements(currentPage = 1) {

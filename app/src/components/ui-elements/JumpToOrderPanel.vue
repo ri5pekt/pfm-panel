@@ -17,10 +17,12 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { useMessage } from "naive-ui";
+import { useOrderWorkTabs } from "@/composables/useOrderWorkTabs";
 
 const router = useRouter();
 const message = useMessage();
 const input = ref("");
+const { openOrder: openOrderTab } = useOrderWorkTabs();
 
 function go() {
     const raw = (input.value || "").trim();
@@ -32,6 +34,8 @@ function go() {
         message.warning("Enter a valid order ID");
         return;
     }
+
+    openOrderTab(id);
     router.push({ name: "order-view", params: { id } });
 }
 </script>

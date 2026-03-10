@@ -38,6 +38,11 @@
 
                         <p><strong>Date Created:</strong> {{ formattedCreatedDate }}</p>
 
+                        <p v-if="!props.isArchived">
+                            <strong>Customer IP: </strong>
+                            <span>{{ order.customer_ip_address || "—" }}</span>
+                        </p>
+
                         <p>
                             <strong>Order Total: </strong>
                             <span v-if="order.total !== undefined && order.total !== null">

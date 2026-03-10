@@ -3,7 +3,7 @@
 <template>
     <div class="subscription-view">
         <div class="page-top">
-            <n-button @click="router.back()">← Back to Subscriptions</n-button>
+            <n-button @click="backToSubscriptions">← Back to Subscriptions</n-button>
             <div class="page-title">Subscription #{{ props.id }}</div>
         </div>
         <div class="subscription-grid">
@@ -33,6 +33,7 @@
 import { ref, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useMessage } from "naive-ui";
+import { useSubscriptionWorkTabs } from "@/composables/useSubscriptionWorkTabs";
 
 // Panels
 import SubscriptionInfoPanel from "@/components/subscription-view-panels/SubscriptionInfoPanel.vue";
@@ -64,4 +65,14 @@ function handleSubscriptionUpdate() {
 const message = useMessage();
 const route = useRoute();
 const router = useRouter();
+
+const { closeTab, keyForSubscriptionId, mainKey, setActiveKey } = useSubscriptionWorkTabs();
+
+function backToSubscriptions() {
+    if (props.id) {
+        closeTab(keyForSubscriptionId(props.id));
+    }
+    setActiveKey(mainKey());
+    router.push({ name: "subscriptions" });
+}
 </script>

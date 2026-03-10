@@ -28,6 +28,24 @@ class PFMP_REST_Admin_Actions {
                 'search'        => ['sanitize_callback' => 'sanitize_text_field'], // searches description
             ],
         ]);
+
+        register_rest_route('pfm-panel/v1', '/admin-actions/action-types', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_action_types'],
+            'permission_callback' => [$this, 'can_view_admin_activity'],
+        ]);
+
+        register_rest_route('pfm-panel/v1', '/admin-actions/admins', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_admins'],
+            'permission_callback' => [$this, 'can_view_admin_activity'],
+        ]);
+
+        register_rest_route('pfm-panel/v1', '/admin-actions/resource-types', [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => [$this, 'get_resource_types'],
+            'permission_callback' => [$this, 'can_view_admin_activity'],
+        ]);
     }
 
     public function can_view_admin_activity() {
@@ -103,5 +121,33 @@ class PFMP_REST_Admin_Actions {
         $response->header('X-WP-TotalPages', $max_pages);
 
         return $response;
+    }
+
+    public function get_action_types() {
+        global $wpdb;
+        $sql = "SELECT DISTINCT action_type FROM {$this->table} ORDER BY action_type ASC";
+        $results = $wpdb->get_col($sql);
+        return rest_ensure_response($results ?: []);
+    }
+
+    public function get_admins() {
+        global $wpdb;
+        $sql = "SELECT DISTINCT admin_id, admin_name FROM {$this->table} ORDER BY admin_name ASC";
+        $results = $wpdb->get_results($sql, ARRAY_A);
+        $admins = [];
+        foreach ($results as $row) {
+            $admins[] = [
+                'id' => (int) $row['admin_id'],
+                'name' => $row['admin_name'],
+            ];
+        }
+        return rest_ensure_response($admins);
+    }
+
+    public function get_resource_types() {
+        global $wpdb;
+        $sql = "SELECT DISTINCT resource_type FROM {$this->table} ORDER BY resource_type ASC";
+        $results = $wpdb->get_col($sql);
+        return rest_ensure_response($results ?: []);
     }
 }

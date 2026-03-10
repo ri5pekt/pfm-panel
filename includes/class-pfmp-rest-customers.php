@@ -51,6 +51,12 @@ class PFMP_REST_Customers {
                     'required' => true,
                     'sanitize_callback' => 'absint',
                 ],
+                // Optional: include (filtered) user meta in response for debugging.
+                'include_meta' => [
+                    'required' => false,
+                    'default'  => false,
+                    'sanitize_callback' => 'rest_sanitize_boolean',
+                ],
             ],
         ]);
 
@@ -182,6 +188,12 @@ class PFMP_REST_Customers {
             ]);
         }
 
+        PFMP_Utils::log_admin_action(
+            'loyalty_adjust_request',
+            'customer',
+            "Yotpo points adjust for customer #{$user_id} ({$email}): {$points} points" . ($reason ? " | reason: {$reason}" : '' . " | source: {$source}"),
+        );
+
         return rest_ensure_response([
             'status'  => 'success',
             'message' => 'Points successfully adjusted',
@@ -194,7 +206,7 @@ class PFMP_REST_Customers {
         $id = absint($request->get_param('id'));
         $user = get_userdata($id);
         $source = $request->get_param('source') ?: 'loyalty';
-        
+
         if (!$user) {
             return new WP_Error('not_found', 'Customer not found', ['status' => 404]);
         }
@@ -273,6 +285,7 @@ class PFMP_REST_Customers {
         $switch_to_user_link = user_switching::switch_to_url($user);
         $switch_to_user_link = html_entity_decode($switch_to_user_link);
 
+        PFMP_Utils::log_admin_action('assume_user', 'customer', "Generated switch session for customer #{$id}");
         PFMP_Utils::log($switch_to_user_link);
         return rest_ensure_response([
             'success' => true,
@@ -417,6 +430,21 @@ class PFMP_REST_Customers {
             return new WP_Error('update_failed', $e->getMessage(), ['status' => 500]);
         }
 
+        $did_orders = !empty($params['update_all_orders']);
+        $did_subs   = !empty($params['update_all_subscriptions']);
+
+        PFMP_Utils::log_admin_action(
+            'update',
+            'customer',
+            sprintf(
+                "Updated customer #%d (fields: %s)%s%s",
+                $id,
+                $fields ? implode(', ', $fields) : 'none',
+                $did_orders ? ' | propagated to orders' : '',
+                $did_subs   ? ' | propagated to subscriptions' : ''
+            )
+        );
+
         return rest_ensure_response(['success' => true, 'fields' => $fields]);
     }
 
@@ -481,8 +509,81 @@ class PFMP_REST_Customers {
             'registered'      => date('Y-m-d', strtotime($user->user_registered)),
             'billing'         => $billing,
             'shipping'        => $shipping,
+            'meta_data'       => $this->get_customer_meta_data($user->ID),
         ];
         return rest_ensure_response($data);
+    }
+
+    /**
+     * Return filtered user meta as Woo-like meta_data [{ key, value }].
+     * We exclude WP/admin/session related keys to avoid leaking sensitive internal state.
+     */
+    private function get_customer_meta_data($user_id) {
+        $raw = get_user_meta($user_id);
+        if (!is_array($raw)) {
+            return [];
+        }
+
+        $deny_keys = [
+            'session_tokens',
+            'wp_capabilities',
+            'wp_user_level',
+            'dismissed_wp_pointers',
+            'show_admin_bar_front',
+            'admin_color',
+            'rich_editing',
+            'syntax_highlighting',
+            'comment_shortcuts',
+            'use_ssl',
+            'community-events-location',
+            'wp_dashboard_quick_press_last_post_id',
+            'wp_user-settings',
+            'wp_user-settings-time',
+        ];
+
+        $deny_prefixes = [
+            'wp_',
+            'closedpostboxes_',
+            'metaboxhidden_',
+            'managenav-menuscolumnshidden',
+            'nav_menu_',
+        ];
+
+        $out = [];
+        foreach ($raw as $key => $values) {
+            if (!is_string($key) || $key === '') {
+                continue;
+            }
+            if (in_array($key, $deny_keys, true)) {
+                continue;
+            }
+            $blocked = false;
+            foreach ($deny_prefixes as $prefix) {
+                if (strpos($key, $prefix) === 0) {
+                    $blocked = true;
+                    break;
+                }
+            }
+            if ($blocked) {
+                continue;
+            }
+
+            // WP stores meta as arrays of values; most keys are single-valued.
+            $value = null;
+            if (is_array($values)) {
+                $value = count($values) === 1 ? $values[0] : $values;
+            } else {
+                $value = $values;
+            }
+            $value = maybe_unserialize($value);
+
+            $out[] = [
+                'key'   => $key,
+                'value' => $value,
+            ];
+        }
+
+        return $out;
     }
 
     public function get_customers(WP_REST_Request $request) {

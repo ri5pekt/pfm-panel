@@ -35,6 +35,7 @@ import { ref, reactive, onMounted, watch, h } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { NTag } from "naive-ui";
 import { request } from "@/utils/api";
+import { useSubscriptionWorkTabs } from "@/composables/useSubscriptionWorkTabs";
 
 const subscriptions = ref([]);
 const loading = ref(false);
@@ -44,6 +45,7 @@ const totalPages = ref(1);
 
 const router = useRouter();
 const route = useRoute();
+const { openSubscription: openSubscriptionTab } = useSubscriptionWorkTabs();
 
 const filters = reactive({
     date_from: route.query.date_from ?? null,
@@ -181,13 +183,22 @@ function openSubscription(row, e) {
     const loc = { name: "subscription-view", params: { id: row.id } };
     const href = router.resolve(loc).href; // e.g. "#/subscriptions/123" (hash history)
 
-    if (e?.metaKey || e?.ctrlKey || e?.button === 1) {
-        // Cmd/Ctrl or middle click → new tab
+    // Match Orders behavior: internal SPA tabs by default.
+    // - Ctrl/Cmd/middle-click: open background internal tab (stay on list)
+    // - Plain click: open and navigate (activate)
+    // - Shift-click: open real browser tab (escape hatch)
+    if (e?.shiftKey) {
         window.open(href, "_blank", "noopener");
-    } else {
-        // Plain left click → SPA
-        router.push(loc);
+        return;
     }
+
+    if (e?.metaKey || e?.ctrlKey || e?.button === 1) {
+        openSubscriptionTab(row.id, { activate: false });
+        return;
+    }
+
+    openSubscriptionTab(row.id, { activate: true });
+    router.push(loc);
 }
 
 function rowProps(row) {
@@ -202,9 +213,11 @@ function rowProps(row) {
             }
         },
         onContextmenu: (e) => {
-            // Right click → new tab
-            e.preventDefault(); // remove if you want browser context menu
-            openSubscription(row, { ...e, metaKey: true });
+            // Right-click should open a real browser tab (not an internal tab)
+            e.preventDefault();
+            const loc = { name: "subscription-view", params: { id: row.id } };
+            const href = router.resolve(loc).href;
+            window.open(href, "_blank", "noopener");
         },
     };
 }

@@ -67,6 +67,36 @@ body {
     margin-bottom: 20px;
 }
 
+// Orders internal "work tabs" bar spacing / readability
+.work-tabs-bar {
+    margin-top: 8px;   // space from the main nav tabs
+    margin-bottom: 14px; // space before page content
+}
+
+.work-tabs {
+    // Add spacing between "Orders" (main tab) and the order tabs
+    .n-tabs-nav-scroll-content {
+        column-gap: 12px;
+    }
+
+    // Highlight active work tab (Naive UI)
+    // Naive applies visuals on different nodes depending on tab type, so target a few common ones.
+    $active-bg: rgba(0, 150, 199, 0.16);
+
+    .n-tabs-tab.n-tabs-tab--active,
+    .n-tabs-tab-wrapper.n-tabs-tab-wrapper--active,
+    .n-tabs-tab-wrapper.n-tabs-tab-wrapper--active .n-tabs-tab {
+        background-color: $active-bg !important;
+        border-color: rgba(0, 150, 199, 0.55) !important;
+    }
+
+    .n-tabs-tab.n-tabs-tab--active .n-tabs-tab__label,
+    .n-tabs-tab-wrapper.n-tabs-tab-wrapper--active .n-tabs-tab__label {
+        color: var(--text-color-special) !important;
+        font-weight: 700;
+    }
+}
+
 // 🧱 Typography & Base
 .page-title {
     font-size: 2rem;

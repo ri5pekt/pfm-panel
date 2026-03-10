@@ -2,9 +2,9 @@
 <template>
     <div class="order-view">
         <div class="page-top">
-            <n-button @click="router.back()">← Back to Orders</n-button>
+            <n-button @click="backToReplacements">← Back to Replacement Orders</n-button>
             <div class="page-title">
-                Order #{{ id }}
+                Order #{{ props.id }}
                 <n-tag type="info" size="small" style="margin-left: 8px; vertical-align: middle"> Replacement </n-tag>
             </div>
         </div>
@@ -19,12 +19,12 @@
                 sourceType="replacement"
             />
 
-            <OrderNotesPanel :orderId="id" :refreshKey="notesRefreshKey" sourceType="replacement" />
+            <OrderNotesPanel :orderId="props.id" :refreshKey="notesRefreshKey" sourceType="replacement" />
 
             <!-- Order Totals Panel -->
             <OrderTotalsPanel
                 :order="order"
-                :orderId="id"
+                :orderId="props.id"
                 :loading="loadingOrder"
                 @updateOrder="handleOrderUpdate"
                 sourceType="replacement"
@@ -45,16 +45,17 @@
 
 <script setup>
 import { useOrder } from "@/composables/useOrder";
-import { useRoute, useRouter } from "vue-router";
+import { useRouter } from "vue-router";
 import { NButton, NTag } from "naive-ui";
 import { computed, ref } from "vue";
 import OrderInfoPanel from "@/components/order-view-panels/OrderInfoPanel.vue";
 import OrderNotesPanel from "@/components/order-view-panels/OrderNotesPanel.vue";
 import OrderTotalsPanel from "@/components/order-view-panels/OrderTotalsPanel.vue";
 import WarehouseExportPanel from "@/components/order-view-panels/WarehouseExportPanel.vue";
+import { useReplacementWorkTabs } from "@/composables/useReplacementWorkTabs";
 
-const route = useRoute();
 const router = useRouter();
+const { closeTab, keyForReplacementId, mainKey, setActiveKey } = useReplacementWorkTabs();
 
 const props = defineProps({
     id: String,
@@ -69,10 +70,14 @@ const orderId = computed(() => props.id);
 
 const { order, loadingOrder, fetchOrder, getMeta, trackingNumber } = useOrder(orderId, "replacement");
 
-const id = computed(() => route.params.id);
-
 function handleOrderUpdate() {
     fetchOrder();
     refreshNotes();
+}
+
+function backToReplacements() {
+    if (props.id) closeTab(keyForReplacementId(props.id));
+    setActiveKey(mainKey());
+    router.push({ name: "replacements" });
 }
 </script>

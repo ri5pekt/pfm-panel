@@ -18,6 +18,7 @@
 
 <script setup>
 import { ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import { request } from "@/utils/api";
 
 const props = defineProps({
@@ -27,16 +28,28 @@ const props = defineProps({
 
 const subscriptionNotes = ref([]);
 const loadingNotes = ref(true);
+const loadedFor = ref(null); // subscriptionId
+const loadedRefreshKey = ref(null);
+const route = useRoute();
 
 async function fetchNotes() {
     if (!props.subscriptionId) return;
-    loadingNotes.value = true;
+    if (route.name !== "subscription-view") return;
+
+    const rk = props.refreshKey ?? null;
+    if (loadedFor.value === props.subscriptionId && loadedRefreshKey.value === rk && subscriptionNotes.value.length) {
+        return;
+    }
+
+    loadingNotes.value = subscriptionNotes.value.length === 0;
 
     try {
         subscriptionNotes.value = await request({
             url: `/subscriptions/${props.subscriptionId}/notes`,
             useCustomApi: true,
         });
+        loadedFor.value = props.subscriptionId;
+        loadedRefreshKey.value = rk;
     } catch (err) {
         console.error("❌ Failed to load subscription notes:", err);
     } finally {

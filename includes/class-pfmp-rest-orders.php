@@ -47,12 +47,6 @@ class PFMP_REST_Orders {
             'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel']
         ]);
 
-        register_rest_route('pfm-panel/v1', '/orders/(?P<id>\d+)/refund', [
-            'methods'             => WP_REST_Server::CREATABLE,
-            'callback'            => [$this, 'refund_order_items'],
-            'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel']
-        ]);
-
         register_rest_route('pfm-panel/v1', '/orders/(?P<order_id>\d+)/revalidate-address', [
             'methods'  => 'POST',
             'callback' => [$this, 'handle_address_revalidation'],
@@ -623,7 +617,12 @@ class PFMP_REST_Orders {
             $formatted[] = [
                 'id'           => $note->id,
                 'note'         => $content,
-                'date_created' => $note->date_created ? $note->date_created->date('c') : '',
+                // Keep consistent with refunds: add +5 hours to align UI timing expectations.
+                'date_created' => $note->date_created ? (function () use ($note) {
+                    $dt = clone $note->date_created;
+                    $dt->modify('+5 hours');
+                    return $dt->date('c');
+                })() : '',
                 'author'       => $note->added_by ?: '',
                 'is_customer'  => $note->customer_note ? true : false,
                 'type'         => $note->customer_note ? 'customer' : 'internal',
@@ -639,7 +638,7 @@ class PFMP_REST_Orders {
             'hair' => [1860895, 570671, 216928, 1068419, 616215],
             'body' => [1646173, 3276357, 2475444, 1450671, 1495139, 216919, 3008280],
             'wellness' => [2293541],
-            'bundles' => [1813624, 250223, 250209, 1868710, 616306, 1607485, 2769533, 2769100, 3279775],
+            'bundles' => [1813624, 250223, 250209, 1868710, 616306, 1607485, 2769533, 2769100, 3279775, 3536797],
         ];
         $labels = [
             'face' => 'Face',
@@ -1244,347 +1243,7 @@ class PFMP_REST_Orders {
 
 
 
-    public function refund_order_items(WP_REST_Request $request) {
-        try {
-            $order_id = absint($request['id']);
-            $params   = $request->get_json_params();
-            $order    = wc_get_order($order_id);
-
-            if (!$order) {
-                return new WP_Error('invalid_order', 'Order not found', ['status' => 404]);
-            }
-
-            $refund_items    = $params['items'] ?? [];
-            $refund_fees     = $params['fees'] ?? [];
-            $refund_shipping = $params['shipping'] ?? [];
-
-            PFMP_Utils::log("🧾 Refund request received for Order #$order_id");
-            PFMP_Utils::log("🧾 Refund items: " . print_r($refund_items, true));
-            PFMP_Utils::log("🧾 Refund fees: " . print_r($refund_fees, true));
-            PFMP_Utils::log("🧾 Refund shipping: " . print_r($refund_shipping, true));
-
-            // Get tax rate (if one and only one exists)
-            $tax_rate_id = null;
-            $tax_items   = $order->get_items('tax');
-            if (count($tax_items) === 1) {
-                $tax_rate_id = current($tax_items)->get_rate_id();
-            }
-
-            $refund_ids  = [];
-            $items_by_tx = ['default' => []];
-
-            foreach ($refund_items as $item) {
-                $tx_id = $item['transaction_id'] ?? 'default';
-                $items_by_tx[$tx_id][] = $item;
-            }
-            // Make sure fees/shipping also respect transactions if you ever send tx on them
-            $fees_by_tx = ['default' => $refund_fees];
-            $ship_by_tx = ['default' => $refund_shipping];
-
-            foreach ($items_by_tx as $tx_id => $grouped_items) {
-                $refund_data = [
-                    'order_id'      => $order_id,
-                    'refund_reason' => !empty($params['reason']) ? sanitize_textarea_field($params['reason']) : 'Refund via PFM Panel',
-                    'line_items'    => [],
-                    'restock_items' => false,
-                ];
-
-                // Two different totals:
-                // - $bt_total_refund: send "as-is" (raw request) to Braintree
-                // - $wc_total_refund: Woo refund amount built from normalized (snapped) lines
-                $bt_total_refund = 0.0;
-                $wc_total_refund = 0.0;
-
-                // 🔁 PRODUCTS
-                foreach ($grouped_items as $item) {
-                    $item_id = absint($item['id']);
-                    $qty     = isset($item['quantity']) ? absint($item['quantity']) : 0;
-                    $req_total = floatval($item['total']);
-                    $req_tax   = floatval($item['tax']);
-                    if ($req_total === 0.0 && $req_tax === 0.0) {
-                        continue;
-                    }
-
-                    // BT: add raw
-                    $bt_total_refund += ($req_total + $req_tax);
-
-                    // WC: snap to original if "almost equal"
-                    $order_item = $order->get_item($item_id);
-                    if (!$order_item) {
-                        continue;
-                    }
-
-                    $orig_total = (float) $order_item->get_total();
-                    $orig_tax   = array_sum($order_item->get_taxes()['total'] ?? []);
-
-                    $wc_total   = $req_total;
-                    $wc_tax     = $req_tax;
-
-                    if (abs($orig_total - $req_total) < 0.1) {
-                        $wc_total = $orig_total;
-                        PFMP_Utils::log("🔧 Adjusted product total for item $item_id to match original ($wc_total)");
-                    }
-                    if (abs($orig_tax - $req_tax) < 0.1) {
-                        $wc_tax = $orig_tax;
-                        PFMP_Utils::log("🔧 Adjusted product tax for item $item_id to match original ($wc_tax)");
-                    }
-
-                    $line = array_filter([
-                        'qty'          => $qty > 0 ? $qty : null,
-                        'refund_total' => $wc_total,
-                    ]);
-
-                    if ($wc_tax > 0) {
-                        $taxes = $order_item->get_taxes();
-                        $line['refund_tax'] = [];
-
-                        if (!empty($taxes['total'])) {
-                            $total_tax_original = array_sum($taxes['total']);
-                            if ($total_tax_original != 0.0) {
-                                foreach ($taxes['total'] as $rate_id => $tax_value) {
-                                    $ratio = $tax_value / $total_tax_original;
-                                    $line['refund_tax'][$rate_id] = round($wc_tax * $ratio, 2);
-                                }
-                            }
-                        }
-                    }
-
-                    $refund_data['line_items'][$item_id] = $line;
-                    $wc_total_refund += ($wc_total + (isset($line['refund_tax']) ? array_sum($line['refund_tax']) : 0));
-                }
-
-                // 💸 FEES
-                foreach ($fees_by_tx[$tx_id] ?? [] as $fee) {
-                    $fee_id    = absint($fee['id']);
-                    $req_total = floatval($fee['total']);
-                    $req_tax   = floatval($fee['tax']);
-                    if ($req_total === 0.0 && $req_tax === 0.0) {
-                        continue;
-                    }
-
-                    // BT: raw
-                    $bt_total_refund += ($req_total + $req_tax);
-
-                    // WC: snap
-                    $order_fee   = $order->get_item($fee_id);
-                    if (!$order_fee) {
-                        continue;
-                    }
-
-                    $orig_total  = (float) $order_fee->get_total();
-                    $orig_tax    = array_sum($order_fee->get_taxes()['total'] ?? []);
-
-                    $wc_total = $req_total;
-                    $wc_tax   = $req_tax;
-
-                    if (abs($orig_total - $req_total) < 0.1) {
-                        $wc_total = $orig_total;
-                        PFMP_Utils::log("🔧 Adjusted fee total for fee $fee_id to match original ($wc_total)");
-                    }
-                    if (abs($orig_tax - $req_tax) < 0.1) {
-                        $wc_tax = $orig_tax;
-                        PFMP_Utils::log("🔧 Adjusted fee tax for fee $fee_id to match original ($wc_tax)");
-                    }
-
-                    $line = ['refund_total' => $wc_total];
-                    if ($wc_tax > 0 && $tax_rate_id) {
-                        $line['refund_tax'] = [$tax_rate_id => round($wc_tax, 2)];
-                    }
-
-                    $refund_data['line_items'][$fee_id] = $line;
-                    $wc_total_refund += ($wc_total + (isset($line['refund_tax']) ? array_sum($line['refund_tax']) : 0));
-                }
-
-                // 🚚 SHIPPING
-                foreach ($ship_by_tx[$tx_id] ?? [] as $shipping) {
-                    $shipping_id = absint($shipping['id']);
-                    $req_total   = floatval($shipping['total']);
-                    $req_tax     = floatval($shipping['tax']);
-                    if ($req_total === 0.0 && $req_tax === 0.0) {
-                        continue;
-                    }
-
-                    // BT: raw
-                    $bt_total_refund += ($req_total + $req_tax);
-
-                    // WC: snap
-                    $order_shipping = $order->get_item($shipping_id);
-                    if (!$order_shipping) {
-                        continue;
-                    }
-
-                    $orig_total = (float) $order_shipping->get_total();
-                    $orig_tax   = array_sum($order_shipping->get_taxes()['total'] ?? []);
-
-                    $wc_total = $req_total;
-                    $wc_tax   = $req_tax;
-
-                    if (abs($orig_total - $req_total) < 0.1) {
-                        $wc_total = $orig_total;
-                        PFMP_Utils::log("🔧 Adjusted shipping total for $shipping_id to match original ($wc_total)");
-                    }
-                    if (abs($orig_tax - $req_tax) < 0.1) {
-                        $wc_tax = $orig_tax;
-                        PFMP_Utils::log("🔧 Adjusted shipping tax for $shipping_id to match original ($wc_tax)");
-                    }
-
-                    $line = ['refund_total' => $wc_total];
-                    if ($wc_tax > 0 && $tax_rate_id) {
-                        $line['refund_tax'] = [$tax_rate_id => round($wc_tax, 2)];
-                    }
-
-                    $refund_data['line_items'][$shipping_id] = $line;
-                    $wc_total_refund += ($wc_total + (isset($line['refund_tax']) ? array_sum($line['refund_tax']) : 0));
-                }
-
-                if (empty($refund_data['line_items'])) {
-                    continue;
-                }
-
-                // --- BRAINTREE: send raw amount (exactly what the UI requested) ---
-                if (!empty($params['refund_via_braintree'])) {
-                    $tx_to_use = ($tx_id === 'default') ? $order->get_transaction_id() : $tx_id;
-                    $bt_amount_str = number_format((float) $bt_total_refund, 2, '.', ''); // BT likes "12.34"
-                    PFMP_Utils::log("🚦 Braintree refund for tx '$tx_to_use' raw total: {$bt_amount_str}");
-                    PFMP_Utils::log(sprintf(
-                        "🚦 Calling refund_braintree_transaction: order_id=%s, amount=%s, reason=%s, tx_id=%s",
-                        $order->get_id(),
-                        $bt_amount_str,
-                        $refund_data['refund_reason'],
-                        $tx_to_use
-                    ));
-                    $result = $this->refund_braintree_transaction(
-                        $order,
-                        $bt_amount_str,
-                        $refund_data['refund_reason'],
-                        $tx_to_use
-                    );
-                    PFMP_Utils::log("🚦 Braintree refund result: " . print_r($result, true));
-                    if (is_wp_error($result)) {
-                        return new WP_REST_Response(['success' => false, 'error' => $result->get_error_message()], 400);
-                    }
-                }
-
-                // --- WOO: use snapped line items/taxes, recompute amount from the lines ---
-                $refund_data['amount'] = wc_format_decimal(array_reduce(
-                    $refund_data['line_items'],
-                    function ($sum, $line) {
-                        $t = (float) ($line['refund_total'] ?? 0);
-                        $x = is_array($line['refund_tax'] ?? null) ? array_sum($line['refund_tax']) : 0;
-                        return $sum + $t + $x;
-                    },
-                    0.0
-                ), 2);
-
-                PFMP_Utils::log("🚦 Final refund_data (WC): " . print_r($refund_data, true));
-                PFMP_Utils::log("💰 WC refund amount (snapped): " . $refund_data['amount']);
-
-                $refund = wc_create_refund($refund_data);
-
-                PFMP_Utils::log_admin_action('refund', 'order', "Created refund #{$refund->get_id()} on order #{$order_id} ({$refund_data['amount']})");
-
-                if (!is_wp_error($refund)) {
-                    $refund->set_reason($refund_data['refund_reason']);
-                    $refund->save();
-                    $order->add_order_note('Refund created: ' . $refund_data['refund_reason']);
-                    $order->save();
-                    $refund_ids[] = $refund->get_id();
-                } else {
-                    PFMP_Utils::log("❌ Refund creation error: " . $refund->get_error_message());
-                    return new WP_REST_Response([
-                        'success' => false,
-                        'error'   => $refund->get_error_message(),
-                    ], 400);
-                }
-            }
-
-            if (empty($refund_ids)) {
-                return new WP_Error('no_refund_data', 'Nothing to refund', ['status' => 400]);
-            }
-
-            if ($order->get_total_refunded() >= $order->get_total()) {
-                $order->update_status('refunded', 'Order fully refunded via PFM Panel');
-            }
-
-            return rest_ensure_response([
-                'success'    => true,
-                'refund_ids' => $refund_ids,
-            ]);
-        } catch (Throwable $e) {
-            return new WP_Error('server_error', 'Unexpected server error: ' . $e->getMessage(), ['status' => 500]);
-        }
-    }
-
-
-
-
-
-
-
-    public function refund_braintree_transaction($order, $amount, $reason = '', $transaction_id = null) {
-        if (!$transaction_id) {
-            $transaction_id = $order->get_transaction_id();
-        }
-
-        if (empty($transaction_id)) {
-
-            return new WP_Error('refund-error', 'Missing transaction ID for this order.');
-        }
-
-        $decimals = wc_get_price_decimals(); // respects currency (e.g., 0 for JPY, 2 for USD)
-        $amount   = number_format(round((float) $amount, $decimals), $decimals, '.', '');
-
-        $current_user = wp_get_current_user();
-        $admin_name = $current_user->display_name ?? 'Admin';
-        $admin_roles = $current_user->roles ?? [];
-
-        $settings = get_option('woocommerce_braintree_api_settings');
-
-        $environment = $settings['environment'];
-        if ($environment === 'sandbox') {
-            $public_key  = $settings['sandbox_public_key'];
-            $private_key = $settings['sandbox_private_key'];
-            $merchant_id = $settings['sandbox_merchant_id'];
-        } else {
-            $public_key  = $settings['production_public_key'];
-            $private_key = $settings['production_private_key'];
-            $merchant_id = $settings['production_merchant_id'];
-        }
-
-        \Braintree\Configuration::environment($environment);
-        \Braintree\Configuration::merchantId($merchant_id);
-        \Braintree\Configuration::publicKey($public_key);
-        \Braintree\Configuration::privateKey($private_key);
-
-
-
-        try {
-            $result = \Braintree\Transaction::refund($transaction_id, $amount);
-
-            if ($result->success) {
-                $refund_id = $result->transaction->id;
-
-                $order->add_order_note(sprintf(
-                    '✅ Refund processed in Braintree. Amount: %s. Refund ID: %s. By %s.',
-                    wc_price($amount, ['currency' => $order->get_currency()]),
-                    $refund_id,
-                    $admin_name
-                ));
-                $order->update_meta_data('_braintree_refund_id', $refund_id);
-                $order->save();
-                PFMP_Utils::log_admin_action('refund_gateway', 'order', "Braintree refund for order #{$order->get_id()} | tx {$transaction_id} | amount {$amount}");
-
-                return true;
-            } else {
-                $error_message = $result->message;
-
-                return new WP_Error('refund-error', 'Braintree error: ' . $error_message);
-            }
-        } catch (Exception $e) {
-
-            return new WP_Error('refund-exception', 'Exception: ' . $e->getMessage());
-        }
-    }
+    // Refund functionality moved to PFMP_REST_Refunds (includes/class-pfmp-rest-refunds.php).
 
 
 
@@ -2053,10 +1712,18 @@ class PFMP_REST_Orders {
 
         // ↩ Refunds Summary
         $data['refunds'] = array_map(function ($refund) {
+            // Return ISO 8601 WITH timezone offset so the frontend can parse reliably.
+            // Example: 2026-01-06T13:55:54-05:00
+            $date = null;
+            if ($refund->get_date_created()) {
+                $dt = clone $refund->get_date_created();
+                $dt->modify('+5 hours');
+                $date = $dt->date('c');
+            }
             return [
                 'id'     => $refund->get_id(),
                 'total'  => $refund->get_amount(),
-                'date'   => $refund->get_date_created() ? $refund->get_date_created()->date('Y-m-d H:i:s') : null,
+                'date'   => $date,
                 'reason' => $refund->get_reason(),
             ];
         }, $order->get_refunds());

@@ -21,6 +21,7 @@ import { ref, onMounted, watch, computed, h } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { request } from "@/utils/api";
 import CustomerFiltersPanel from "@/components/ui-elements/CustomerFiltersPanel.vue";
+import { useCustomerWorkTabs } from "@/composables/useCustomerWorkTabs";
 
 const customers = ref([]);
 const totalPages = ref(1);
@@ -29,6 +30,7 @@ const loading = ref(false);
 
 const router = useRouter();
 const route = useRoute();
+const { openCustomer: openCustomerTab } = useCustomerWorkTabs();
 
 const page = ref(1);
 
@@ -98,8 +100,11 @@ function rowProps(row) {
             }
         },
         onContextmenu: (e) => {
-            e.preventDefault(); // remove if you want the browser menu
-            openCustomer(row, { ...e, metaKey: true });
+            // Right-click should open a real browser tab (not an internal tab)
+            e.preventDefault();
+            const loc = { name: "customer-view", params: { id: row.id } };
+            const href = router.resolve(loc).href;
+            window.open(href, "_blank", "noopener");
         },
     };
 }
@@ -108,11 +113,22 @@ function openCustomer(row, e) {
     const loc = { name: "customer-view", params: { id: row.id } };
     const href = router.resolve(loc).href; // e.g. "#/customers/123"
 
-    if (e?.metaKey || e?.ctrlKey || e?.button === 1) {
+    // Match Orders behavior: internal SPA tabs by default.
+    // - Ctrl/Cmd/middle-click: open background internal tab (stay on list)
+    // - Plain click: open and navigate (activate)
+    // - Shift-click: open real browser tab (escape hatch)
+    if (e?.shiftKey) {
         window.open(href, "_blank", "noopener");
-    } else {
-        router.push(loc);
+        return;
     }
+
+    if (e?.metaKey || e?.ctrlKey || e?.button === 1) {
+        openCustomerTab(row.id, { activate: false });
+        return;
+    }
+
+    openCustomerTab(row.id, { activate: true });
+    router.push(loc);
 }
 
 function buildPayload() {
