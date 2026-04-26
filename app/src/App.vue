@@ -1,7 +1,7 @@
 <!-- App.vue -->
 <template>
     <div class="pfm-panel-app">
-        <div class="top-bar">
+        <div v-if="route.name !== 'login'" class="top-bar">
             <n-tabs type="line" :value="currentTab" @update:value="navigate" class="top-tabs">
                 <n-tab name="orders" :tab="renderTab('Orders', 'orders')" />
                 <n-tab name="subscriptions" :tab="renderTab('Subscriptions', 'subscriptions')" />
@@ -16,11 +16,14 @@
                     :tab="renderTab('Admin Activity', 'admin-activity')"
                 />
             </n-tabs>
-            <div class="greeting">👋 Hello, {{ fullName }}!</div>
+            <div class="greeting">
+                👋 Hello, {{ fullName }}!
+                <n-button v-if="showLogout" text size="small" @click="handleLogout">Logout</n-button>
+            </div>
         </div>
 
         <WorkTabsBar
-            v-if="activeWorkShowBar"
+            v-if="activeWorkShowBar && route.name !== 'login'"
             :value="activeWork.activeKey"
             :tabs="activeWork.tabs"
             @change="activeWork.onChange"
@@ -34,6 +37,10 @@
                 </KeepAlive>
             </Transition>
         </RouterView>
+
+        <footer v-if="route.name !== 'login'" class="pfm-panel-footer">
+            PFM Panel v{{ appVersion }}
+        </footer>
     </div>
 </template>
 
@@ -41,6 +48,7 @@
 import { useRouter, useRoute } from "vue-router";
 import { ref, watch, h, computed } from "vue";
 import { can as pfmCan } from "@/utils/permissions";
+import { logout, getStoredUser } from "@/utils/api";
 import { useOrderWorkTabs } from "@/composables/useOrderWorkTabs";
 import { useSubscriptionWorkTabs } from "@/composables/useSubscriptionWorkTabs";
 import { useCustomerWorkTabs } from "@/composables/useCustomerWorkTabs";
@@ -50,10 +58,20 @@ import WorkTabsBar from "@/components/ui-elements/WorkTabsBar.vue";
 
 const router = useRouter();
 const route = useRoute();
-const fullName = window.PFMPanelData?.user?.full_name || "Admin";
-const roles = window.PFMPanelData?.user?.roles || [];
+
+const appVersion = __APP_VERSION__;
+
+const _storedUser = getStoredUser();
+const fullName = window.PFMPanelData?.user?.full_name || _storedUser?.full_name || "Admin";
+const roles = window.PFMPanelData?.user?.roles || _storedUser?.roles || [];
 const hasAdminRights = pfmCan("admin_rights");
+const showLogout = !window?.PFMPanelData?.nonce; // only show on external server
 console.log("🛂 Logged-in user roles:", roles);
+
+function handleLogout() {
+    logout();
+    router.push({ name: "login" });
+}
 
 const tabMap = {
     orders: "orders",
@@ -222,3 +240,14 @@ function viewKey(r) {
     return `${r.name}:${paramsKey}`;
 }
 </script>
+
+<style scoped>
+.pfm-panel-footer {
+    text-align: center;
+    padding: 8px;
+    font-size: 11px;
+    color: #aaa;
+    border-top: 1px solid #eee;
+    margin-top: 16px;
+}
+</style>

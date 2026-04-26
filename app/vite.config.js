@@ -2,14 +2,20 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import path from "path";
+import { readFileSync } from "fs";
+
+const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8"));
 
 export default defineConfig({
     root: path.resolve(__dirname),
     plugins: [vue()],
+    define: {
+        __APP_VERSION__: JSON.stringify(pkg.version),
+    },
     server: {
         proxy: {
             "/wp-json": {
-                target: "https://particlestage.wpengine.com",
+                target: "https://www.particleformen.com",
                 changeOrigin: true,
                 secure: false,
             },
