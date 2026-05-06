@@ -27,7 +27,10 @@ import CouponsList from "./views/coupons/CouponsList.vue";
 
 import AdminActionsList from "./views/admin/AdminActionsList.vue";
 
+import LoginView from "./views/LoginView.vue";
+
 import { can } from "@/utils/permissions";
+import { isExternalServer, getStoredUser } from "@/utils/api";
 
 import "./assets/main.css";
 
@@ -46,11 +49,17 @@ const routes = [
     { path: "/reports/:key", name: "report-view", component: ReportView, props: true },
     { path: "/admin-activity", component: AdminActionsList, name: "admin-activity", meta: { requiresAdmin: true } },
     { path: "/coupons", component: CouponsList, name: "coupons" },
+    { path: "/login", component: LoginView, name: "login" },
 ];
 
 const router = createRouter({
     history: createWebHashHistory(),
     routes,
+});
+
+router.beforeEach((to) => {
+    if (to.name === "login") return true;
+    if (isExternalServer() && !getStoredUser()) return { name: "login" };
 });
 
 if (typeof window.PFMPanelData === "undefined") {

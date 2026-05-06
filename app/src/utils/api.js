@@ -22,6 +22,11 @@ function getApiBase() {
 
 export const apiBase = getApiBase();
 
+export function isExternalServer() {
+    const isDev = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+    return !isDev && !window?.PFMPanelData?.nonce;
+}
+
 export async function request({
     url,
     method = "GET",
@@ -40,10 +45,23 @@ export async function request({
     }
 
     const isDev = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+    const isExternal = !isDev && !window?.PFMPanelData?.nonce;
+
+    let authHeaders = {};
+    if (isDev) {
+        authHeaders = { Authorization: authHeader };
+    } else if (isExternal) {
+        const user = getStoredUser();
+        if (user?.username && user?.appPassword) {
+            authHeaders = { Authorization: "Basic " + btoa(`${user.username}:${user.appPassword}`) };
+        }
+    } else {
+        authHeaders = { "X-WP-Nonce": window?.PFMPanelData?.nonce || "" };
+    }
 
     const finalHeaders = {
         "Content-Type": "application/json",
-        ...(isDev ? { Authorization: authHeader } : { "X-WP-Nonce": window?.PFMPanelData?.nonce || "" }),
+        ...authHeaders,
         ...headers,
     };
 

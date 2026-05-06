@@ -94,9 +94,11 @@ export function getCombinedCapabilities(roles = []) {
     }, {});
 }
 
-// 👮‍♂️ Check if user has a specific capability (based on PFMPanelData.roles)
+// 👮‍♂️ Check if user has a specific capability (based on PFMPanelData.roles or stored user)
 export function can(capability) {
-    const roles = window?.PFMPanelData?.user?.roles || [];
+    const roles = window?.PFMPanelData?.user?.roles
+        || (() => { try { return JSON.parse(localStorage.getItem("pfm_panel_user"))?.roles; } catch { return null; } })()
+        || [];
     const caps = getCombinedCapabilities(roles);
     return !!caps[capability];
 }
