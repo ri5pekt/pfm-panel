@@ -634,8 +634,8 @@ class PFMP_REST_Orders {
 
     public function get_products_by_category(WP_REST_Request $request) {
         $categories = [
-            'face' => [7, 2213887, 100362, 100370, 616257, 1077388, 2299802, 3312652],
-            'hair' => [1860895, 570671, 216928, 1068419, 616215],
+            'face' => [7, 2213887, 100362, 100370, 616257, 1077388, 2299802, 3312652, 3175815, 3836565],
+            'hair' => [1860895, 570671, 216928, 1068419, 616215, 3836549],
             'body' => [1646173, 3276357, 2475444, 1450671, 1495139, 216919, 3008280],
             'wellness' => [2293541],
             'bundles' => [1813624, 250223, 250209, 1868710, 616306, 1607485, 2769533, 2769100, 3279775, 3536797],
@@ -1173,15 +1173,25 @@ class PFMP_REST_Orders {
             PFMP_Utils::log_admin_action('export', 'order', "Exported order #{$order_id} to warehouse '{$warehouse_slug}'");
 
             return new WP_REST_Response([
-                'success' => true,
-                'message' => 'Order was manually exported successfully!',
+                'success'       => true,
+                'message'       => $response['message'] ?? 'Order was manually exported successfully!',
+                'response_code' => $response['response_code'] ?? null,
+                'response_body' => $response['response_body'] ?? null,
+                'cf_ray'        => $response['cf_ray'] ?? null,
+                'lat_ms'        => $response['lat_ms'] ?? null,
+                'request_id'    => $response['request_id'] ?? null,
             ]);
         }
 
         $error_msg = !empty($response['message']) ? $response['message'] : 'Unknown error.';
         return new WP_REST_Response([
-            'success' => false,
-            'message' => "Export failed: {$error_msg}",
+            'success'       => false,
+            'message'       => "Export failed: {$error_msg}",
+            'response_code' => $response['response_code'] ?? null,
+            'response_body' => $response['response_body'] ?? null,
+            'cf_ray'        => $response['cf_ray'] ?? null,
+            'lat_ms'        => $response['lat_ms'] ?? null,
+            'request_id'    => $response['request_id'] ?? null,
         ], 400);
     }
 

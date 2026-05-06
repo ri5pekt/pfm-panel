@@ -84,3 +84,22 @@ export async function request({
     // Return parsed JSON when possible; otherwise empty object (e.g., 204)
     return typeof data !== "undefined" ? data : {};
 }
+
+const STORED_USER_KEY = "pfm_panel_user";
+
+export function getStoredUser() {
+    try {
+        const raw = localStorage.getItem(STORED_USER_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+}
+
+export function storeUser(user) {
+    localStorage.setItem(STORED_USER_KEY, JSON.stringify(user));
+}
+
+export function logout() {
+    localStorage.removeItem(STORED_USER_KEY);
+}

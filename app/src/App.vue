@@ -65,7 +65,7 @@ const _storedUser = getStoredUser();
 const fullName = window.PFMPanelData?.user?.full_name || _storedUser?.full_name || "Admin";
 const roles = window.PFMPanelData?.user?.roles || _storedUser?.roles || [];
 const hasAdminRights = pfmCan("admin_rights");
-const showLogout = !window?.PFMPanelData?.nonce; // only show on external server
+const showLogout = !window?.PFMPanelData?.nonce;
 console.log("🛂 Logged-in user roles:", roles);
 
 function handleLogout() {

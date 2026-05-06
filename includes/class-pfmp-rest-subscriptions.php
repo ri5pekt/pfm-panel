@@ -156,6 +156,19 @@ class PFMP_REST_Subscriptions {
                             $gateway = wc_get_payment_gateway_by_order( $subscription );
                             if ( $gateway ) {
                                 $order->set_payment_method( $gateway );
+
+                                // BlueSnap requires _bluesnap_ondemand_subscription_id on the renewal order.
+                                // wcs_create_renewal_order() copies it from the subscription, but if the
+                                // subscription never had it saved (e.g. async IPN failure at signup), the
+                                // renewal order will be missing it and BlueSnap will throw.
+                                $bluesnap_wallet_key = '_bluesnap_ondemand_subscription_id';
+                                if ( empty( $order->get_meta( $bluesnap_wallet_key ) ) ) {
+                                    $wallet_id = $subscription->get_meta( $bluesnap_wallet_key );
+                                    if ( ! empty( $wallet_id ) ) {
+                                        $order->update_meta_data( $bluesnap_wallet_key, $wallet_id );
+                                    }
+                                }
+
                                 $order->save();
                                 do_action( 'woocommerce_scheduled_subscription_payment_' . $gateway->id, $order->get_total(), $order );
                                 $payment_result = $order->get_status();
@@ -1050,6 +1063,12 @@ class PFMP_REST_Subscriptions {
             'meta_value' => $subscription_id,
             'limit' => -1,
         ]);
+        if ( empty( $parents ) && $sub->get_parent_id() ) {
+            $fallback_parent = wc_get_order( $sub->get_parent_id() );
+            if ( $fallback_parent ) {
+                $parents = [ $fallback_parent ];
+            }
+        }
         foreach ($parents as $parent) {
             $branch[] = [
                 'id' => $parent->get_id(),

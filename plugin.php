@@ -3,7 +3,7 @@
 /**
  * Plugin Name: PFM Panel
  * Description: Custom WooCommerce order management panel for Particle for Men.
- * Version: 1.0
+ * Version: 1.0.1
  * Author: Particle for Men
  */
 

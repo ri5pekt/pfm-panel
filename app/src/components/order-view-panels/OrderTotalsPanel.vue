@@ -106,6 +106,7 @@
                                     :value="getEditItem(item.id).quantity"
                                     @update:value="(val) => onEditItemChange(item.id, 'quantity', val)"
                                     :min="0"
+                                    :max="5"
                                     size="small"
                                     style="max-width: 80px"
                                 />
@@ -212,6 +213,7 @@
                                 :value="item.quantity"
                                 @update:value="(val) => onEditItemChange(item.id, 'quantity', val)"
                                 :min="1"
+                                :max="5"
                                 size="small"
                                 style="max-width: 80px"
                             />

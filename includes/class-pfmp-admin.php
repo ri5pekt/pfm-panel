@@ -18,19 +18,29 @@ class PFMP_Admin {
     public function redirect_richpanel_links() {
         if (!is_admin() || headers_sent()) return;
 
-        // WooCommerce order edit page URL format:
+        if (!current_user_can('access_pfm_panel')) return;
+
+        // HPOS format: admin.php?page=wc-orders&action=edit&id=XXX
         if (
             isset($_GET['page'], $_GET['action'], $_GET['id']) &&
             $_GET['page'] === 'wc-orders' &&
-            $_GET['action'] === 'edit' &&
-            current_user_can('access_pfm_panel')
+            $_GET['action'] === 'edit'
         ) {
-            // Check referrer
-            $referer = $_SERVER['HTTP_REFERER'] ?? '';
-            if (strpos($referer, 'app.richpanel.com') !== false) {
-                $target_id = intval($_GET['id']);
-                $redirect_url = admin_url("admin.php?page=pfm-panel#/orders/{$target_id}");
-                wp_redirect($redirect_url);
+            $target_id = intval($_GET['id']);
+            wp_redirect(admin_url("admin.php?page=pfm-panel#/orders/{$target_id}"));
+            exit;
+        }
+
+        // Classic post.php format: post.php?post=XXX&action=edit (used by Richpanel)
+        global $pagenow;
+        if (
+            $pagenow === 'post.php' &&
+            isset($_GET['post'], $_GET['action']) &&
+            $_GET['action'] === 'edit'
+        ) {
+            $post_id = intval($_GET['post']);
+            if (in_array(get_post_type($post_id), ['shop_order', 'shop_subscription'], true)) {
+                wp_redirect(admin_url("admin.php?page=pfm-panel#/orders/{$post_id}"));
                 exit;
             }
         }
@@ -67,16 +77,31 @@ class PFMP_Admin {
             empty($allcaps[$caps[0]]) &&
             current_user_can('access_pfm_panel')
         ) {
+            $target_id = 0;
+
+            // HPOS format: admin.php?page=wc-orders&action=edit&id=XXX
             if (
                 isset($_GET['page'], $_GET['action'], $_GET['id']) &&
                 $_GET['page'] === 'wc-orders' &&
                 $_GET['action'] === 'edit'
             ) {
                 $target_id = intval($_GET['id']);
-                $redirect_url = admin_url("admin.php?page=pfm-panel#/orders/{$target_id}");
+            }
 
+            // Classic post.php format: post.php?post=XXX&action=edit
+            global $pagenow;
+            if (
+                !$target_id &&
+                $pagenow === 'post.php' &&
+                isset($_GET['post'], $_GET['action']) &&
+                $_GET['action'] === 'edit'
+            ) {
+                $target_id = intval($_GET['post']);
+            }
+
+            if ($target_id) {
                 $already_redirected = true;
-                wp_redirect($redirect_url);
+                wp_redirect(admin_url("admin.php?page=pfm-panel#/orders/{$target_id}"));
                 exit;
             }
         }
@@ -656,14 +681,20 @@ class PFMP_Admin {
             'first_name' => $current_user->user_firstname,
             'last_name'  => $current_user->user_lastname,
             'full_name'  => $current_user->display_name,
-            'roles'      => $current_user->roles,
+            'roles'      => (function() use ($current_user) {
+                $roles = array_values($current_user->roles);
+                if (in_array('super_editor', $roles)) {
+                    $roles[] = 'administrator';
+                }
+                return $roles;
+            })(),
         ];
 
 
         $nonce = wp_create_nonce('wp_rest');
 
         $js_path  = plugin_dir_path(dirname(__FILE__)) . 'dist/assets/app.js';
-        $css_path = plugin_dir_path(__FILE__) . 'dist/assets/app.css';
+        $css_path = plugin_dir_path(dirname(__FILE__)) . 'dist/assets/app.css';
 
         $js_ver  = file_exists($js_path)  ? filemtime($js_path)  : null;
         $css_ver = file_exists($css_path) ? filemtime($css_path) : null;
@@ -684,7 +715,7 @@ class PFMP_Admin {
 
         wp_enqueue_style(
             'pfm-panel-css',
-            plugin_dir_url(__FILE__) . 'dist/assets/app.css',
+            plugin_dir_url(dirname(__FILE__)) . 'dist/assets/app.css',
             [],
             $css_ver
         );
