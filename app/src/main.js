@@ -68,9 +68,10 @@ router.beforeEach((to) => {
     }
 });
 
-if (typeof window.PFMPanelData === "undefined") {
+const _isDev = location.hostname === "localhost" || location.hostname === "127.0.0.1";
+if (_isDev && typeof window.PFMPanelData === "undefined") {
     window.PFMPanelData = {
-        restUrl: "https://particlestage.wpengine.com/wp-json/pfm-panel/v1/orders",
+        restUrl: "https://www.particleformen.com/wp-json/pfm-panel/v1",
         nonce: "3597e27540",
         user: {
             first_name: "Local",
