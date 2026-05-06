@@ -34,15 +34,14 @@ class PFMP_Rest_Auth {
         return true;
     }
 
+    const EXTERNAL_URL = 'https://panel.pfm-qa.com';
+
     // -------------------------------------------------------------------------
     // CORS — allows the external panel origin to call the WP REST API
     // -------------------------------------------------------------------------
     public function handle_cors(): void {
-        $allowed = defined('PFM_PANEL_EXTERNAL_URL') ? PFM_PANEL_EXTERNAL_URL : '';
-        if (empty($allowed)) return;
-
         $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-        if ($origin !== rtrim($allowed, '/')) return;
+        if ($origin !== self::EXTERNAL_URL) return;
 
         header("Access-Control-Allow-Origin: $origin");
         header('Access-Control-Allow-Headers: Authorization, Content-Type, X-WP-Nonce');
@@ -86,15 +85,13 @@ class PFMP_Rest_Auth {
     }
 
     // -------------------------------------------------------------------------
-    // Allowed redirect URIs — production URL + localhost when WP_DEBUG is on
+    // Allowed redirect URIs
     // -------------------------------------------------------------------------
     private static function is_allowed_redirect_uri(string $uri): bool {
         if (empty($uri)) return false;
 
-        $allowed = defined('PFM_PANEL_EXTERNAL_URL') ? PFM_PANEL_EXTERNAL_URL : '';
-        if (!empty($allowed) && str_starts_with($uri, rtrim($allowed, '/'))) return true;
+        if (str_starts_with($uri, self::EXTERNAL_URL)) return true;
 
-        // Always allow localhost (dev machines only — still requires valid WP credentials)
         if (
             str_starts_with($uri, 'http://localhost') ||
             str_starts_with($uri, 'http://127.0.0.1')
