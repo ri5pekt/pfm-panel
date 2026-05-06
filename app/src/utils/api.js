@@ -52,8 +52,8 @@ export async function request({
         authHeaders = { Authorization: authHeader };
     } else if (isExternal) {
         const user = getStoredUser();
-        if (user?.username && user?.appPassword) {
-            authHeaders = { Authorization: "Basic " + btoa(`${user.username}:${user.appPassword}`) };
+        if (user?.token) {
+            authHeaders = { Authorization: `Bearer ${user.token}` };
         }
     } else {
         authHeaders = { "X-WP-Nonce": window?.PFMPanelData?.nonce || "" };

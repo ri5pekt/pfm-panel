@@ -5,64 +5,17 @@
                 <div class="login-title">PFM Panel</div>
             </div>
 
-            <n-alert v-if="autoLoginError" type="error" style="margin-bottom: 16px">
-                {{ autoLoginError }}
-            </n-alert>
+            <n-alert v-if="error" type="error" style="margin-bottom: 16px">{{ error }}</n-alert>
 
-            <template v-if="!showManual">
-                <n-button
-                    type="primary"
-                    block
-                    size="large"
-                    :loading="autoLogging"
-                    @click="loginWithWordPress"
-                >
-                    Login with WordPress
-                </n-button>
-
-                <div class="login-divider">or</div>
-
-                <n-button text block @click="showManual = true" style="color: #aaa; font-size: 13px">
-                    Enter credentials manually
-                </n-button>
-            </template>
-
-            <template v-else>
-                <n-form @submit.prevent="handleManualLogin">
-                    <n-form-item label="Username">
-                        <n-input
-                            v-model:value="username"
-                            placeholder="WordPress username"
-                            :disabled="loading"
-                        />
-                    </n-form-item>
-                    <n-form-item label="Application Password">
-                        <n-input
-                            v-model:value="appPassword"
-                            type="password"
-                            show-password-on="click"
-                            placeholder="xxxx xxxx xxxx xxxx xxxx xxxx"
-                            :disabled="loading"
-                        />
-                    </n-form-item>
-
-                    <n-alert v-if="manualError" type="error" style="margin-bottom: 16px">{{ manualError }}</n-alert>
-
-                    <n-button
-                        type="primary"
-                        :loading="loading"
-                        :disabled="!username || !appPassword"
-                        attr-type="submit"
-                        block
-                    >
-                        Sign In
-                    </n-button>
-                </n-form>
-
-                <n-button text block @click="showManual = false" style="margin-top: 12px; color: #aaa; font-size: 13px">
-                    ← Back
-                </n-button>
-            </template>
+            <n-button
+                type="primary"
+                block
+                size="large"
+                :loading="loading"
+                @click="loginWithWordPress"
+            >
+                Login with WordPress
+            </n-button>
         </n-card>
     </div>
 </template>
@@ -72,82 +25,37 @@ import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { storeUser } from "@/utils/api";
 
-const router = useRouter();
-
 const WP_BASE = "https://www.particleformen.com";
-const API_BASE = import.meta.env.VITE_WC_API_URL;
 
-const showManual = ref(false);
-const username = ref("");
-const appPassword = ref("");
+const router = useRouter();
 const loading = ref(false);
-const autoLogging = ref(false);
-const manualError = ref("");
-const autoLoginError = ref("");
+const error = ref("");
 
-onMounted(async () => {
+onMounted(() => {
     const params = new URLSearchParams(window.location.search);
-    const user_login = params.get("user_login");
-    const password = params.get("password");
+    const token = params.get("token");
 
-    if (user_login && password) {
-        // Clear params from URL without triggering navigation
+    if (token) {
         window.history.replaceState({}, "", window.location.pathname);
-        autoLogging.value = true;
-        await attemptLogin(user_login, password.replace(/\s+/g, ""));
-        autoLogging.value = false;
+        try {
+            const payload = JSON.parse(atob(token.split(".")[0]));
+            storeUser({
+                token,
+                full_name: payload.name,
+                roles: payload.roles,
+                exp: payload.exp,
+            });
+            router.push({ name: "orders" });
+        } catch {
+            error.value = "Invalid token received. Please try again.";
+        }
     }
 });
 
 function loginWithWordPress() {
-    const successUrl = window.location.origin + window.location.pathname;
-    const authorizeUrl =
-        `${WP_BASE}/wp-admin/authorize-application.php` +
-        `?app_name=PFM+Panel` +
-        `&success_url=${encodeURIComponent(successUrl)}`;
-    window.location.href = authorizeUrl;
-}
-
-async function handleManualLogin() {
-    if (!username.value || !appPassword.value) return;
-    loading.value = true;
-    manualError.value = "";
-    const err = await attemptLogin(username.value, appPassword.value.replace(/\s+/g, ""));
-    if (err) manualError.value = err;
-    loading.value = false;
-}
-
-async function attemptLogin(user, pass) {
-    try {
-        const res = await fetch(`${API_BASE}/me`, {
-            headers: {
-                Authorization: "Basic " + btoa(`${user}:${pass}`),
-                "Content-Type": "application/json",
-            },
-            credentials: "include",
-        });
-
-        if (!res.ok) {
-            const data = await res.json().catch(() => ({}));
-            return data?.message || "Invalid credentials or insufficient permissions.";
-        }
-
-        const data = await res.json();
-        storeUser({
-            id: data.id,
-            username: user,
-            appPassword: pass,
-            full_name: data.full_name,
-            first_name: data.first_name,
-            last_name: data.last_name,
-            roles: data.roles,
-        });
-
-        router.push({ name: "orders" });
-        return null;
-    } catch {
-        return "Could not connect to the server.";
-    }
+    const redirectUri = window.location.origin + window.location.pathname;
+    window.location.href =
+        `${WP_BASE}/?pfm_auth=1&redirect_uri=${encodeURIComponent(redirectUri)}`;
 }
 </script>
 
@@ -161,24 +69,17 @@ async function attemptLogin(user, pass) {
 }
 
 .login-card {
-    width: 380px;
+    width: 340px;
     max-width: 95vw;
 }
 
 .login-header {
     text-align: center;
-    margin-bottom: 28px;
+    margin-bottom: 24px;
 }
 
 .login-title {
     font-size: 22px;
     font-weight: 600;
-}
-
-.login-divider {
-    text-align: center;
-    color: #ccc;
-    margin: 12px 0;
-    font-size: 12px;
 }
 </style>

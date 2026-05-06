@@ -104,6 +104,40 @@ class PFMP_REST_Customers {
         ]);
 
 
+        register_rest_route('pfm-panel/v1', '/customers/(?P<id>\d+)/store-credits', [
+            'methods'             => 'GET',
+            'callback'            => [$this, 'get_customer_store_credits'],
+            'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
+            'args'                => [
+                'id' => [
+                    'required'          => true,
+                    'sanitize_callback' => 'absint',
+                ],
+            ],
+        ]);
+
+        register_rest_route('pfm-panel/v1', '/customers/(?P<id>\d+)/store-credits-adjust', [
+            'methods'             => 'POST',
+            'callback'            => [$this, 'adjust_customer_store_credits'],
+            'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
+            'args'                => [
+                'id' => [
+                    'required'          => true,
+                    'sanitize_callback' => 'absint',
+                ],
+                'action' => [
+                    'required'          => true,
+                    'sanitize_callback' => 'sanitize_text_field',
+                ],
+                'amount' => [
+                    'required' => true,
+                ],
+                'note' => [
+                    'required' => false,
+                ],
+            ],
+        ]);
+
         register_rest_route('pfm-panel/v1', '/customers/(?P<id>\d+)/yotpo-adjust', [
             'methods'             => 'POST',
             'callback'            => [$this, 'adjust_customer_yotpo_points'],
@@ -125,6 +159,84 @@ class PFMP_REST_Customers {
                     'sanitize_callback' => 'sanitize_text_field',
                 ],
             ],
+        ]);
+    }
+
+
+    public function get_customer_store_credits(WP_REST_Request $request) {
+        $user_id = absint($request->get_param('id'));
+        $user = get_userdata($user_id);
+
+        if (!$user) {
+            return new WP_Error('not_found', 'Customer not found', ['status' => 404]);
+        }
+
+        if (!class_exists('PFM_SC_Credits')) {
+            return new WP_Error('plugin_missing', 'PFM Store Credits plugin is not active', ['status' => 500]);
+        }
+
+        $balance = PFM_SC_Credits::get_balance($user_id);
+        $history = get_user_meta($user_id, '_pfm_store_credits_history', true);
+        if (!is_array($history)) {
+            $history = [];
+        }
+
+        return rest_ensure_response([
+            'balance' => $balance,
+            'history' => array_reverse($history),
+        ]);
+    }
+
+
+    public function adjust_customer_store_credits(WP_REST_Request $request) {
+        $user_id = absint($request->get_param('id'));
+        $action  = sanitize_text_field($request->get_param('action'));
+        $amount  = floatval($request->get_param('amount'));
+        $note    = sanitize_textarea_field($request->get_param('note') ?? '');
+
+        $user = get_userdata($user_id);
+        if (!$user) {
+            return new WP_Error('not_found', 'Customer not found', ['status' => 404]);
+        }
+
+        if (!class_exists('PFM_SC_Credits')) {
+            return new WP_Error('plugin_missing', 'PFM Store Credits plugin is not active', ['status' => 500]);
+        }
+
+        if ($amount <= 0) {
+            return new WP_Error('invalid_amount', 'Amount must be greater than 0', ['status' => 400]);
+        }
+
+        switch ($action) {
+            case 'add':
+                $new_balance = PFM_SC_Credits::add_credits($user_id, $amount, $note);
+                do_action('pfm_sc_admin_credits_adjusted', $user_id, $amount, 'add', $note, $new_balance);
+                break;
+            case 'deduct':
+                $result = PFM_SC_Credits::deduct_credits($user_id, $amount, $note);
+                if ($result === false) {
+                    return new WP_Error('insufficient_credits', 'Insufficient store credits balance', ['status' => 400]);
+                }
+                do_action('pfm_sc_admin_credits_adjusted', $user_id, $amount, 'deduct', $note, $result);
+                break;
+            case 'set':
+                PFM_SC_Credits::set_balance($user_id, $amount);
+                do_action('pfm_sc_admin_credits_adjusted', $user_id, $amount, 'set', $note, $amount);
+                break;
+            default:
+                return new WP_Error('invalid_action', 'Invalid action. Use add, deduct, or set.', ['status' => 400]);
+        }
+
+        PFMP_Utils::log_admin_action(
+            'store_credits_adjust',
+            'customer',
+            "Store credits '{$action}' for customer #{$user_id} ({$user->user_email}): \${$amount}" . ($note ? " | note: {$note}" : ''),
+        );
+
+        return rest_ensure_response([
+            'status'  => 'success',
+            'message' => 'Store credits updated',
+            'balance' => PFM_SC_Credits::get_balance($user_id),
         ]);
     }
 

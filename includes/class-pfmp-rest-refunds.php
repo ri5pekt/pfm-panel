@@ -16,6 +16,17 @@ class PFMP_REST_Refunds {
             'callback'            => [$this, 'refund_order_items'],
             'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel']
         ]);
+
+        register_rest_route('pfm-panel/v1', '/orders/(?P<id>\d+)/refund-via-credits', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'refund_order_via_store_credits'],
+            'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
+            'args'                => [
+                'id'     => ['required' => true, 'sanitize_callback' => 'absint'],
+                'amount' => ['required' => true],
+                'reason' => ['required' => false],
+            ],
+        ]);
     }
 
     public function refund_order_items(WP_REST_Request $request) {
@@ -144,9 +155,11 @@ class PFMP_REST_Refunds {
 
             // Woo safety: compute remaining refundable amount so we don't create Woo refunds
             // that exceed the remaining refundable total (or when already fully refunded).
-            $order_total_amount = (float) $order->get_total();
+            // Also subtract any amount already returned via store credits to prevent combined over-refunding.
+            $order_total_amount      = (float) $order->get_total();
             $already_refunded_amount = (float) $order->get_total_refunded();
-            $remaining_wc_refund = max(0.0, $order_total_amount - $already_refunded_amount);
+            $credit_refunded_amount  = (float) $order->get_meta('_pfm_credit_refund_total');
+            $remaining_wc_refund     = max(0.0, $order_total_amount - $already_refunded_amount - $credit_refunded_amount);
 
             // (debug log removed)
 
@@ -168,7 +181,7 @@ class PFMP_REST_Refunds {
             foreach ($items_by_tx as $tx_id => $grouped_items) {
                 $refund_data = [
                     'order_id'      => $order_id,
-                    'refund_reason' => !empty($params['reason']) ? sanitize_textarea_field($params['reason']) : 'Refund via PFM Panel',
+                    'reason'        => !empty($params['reason']) ? sanitize_textarea_field($params['reason']) : 'Refund via PFM Panel',
                     'line_items'    => [],
                     'restock_items' => false,
                 ];
@@ -378,13 +391,13 @@ class PFMP_REST_Refunds {
                         "🚦 Calling refund_braintree_transaction: order_id=%s, amount=%s, reason=%s, tx_id=%s",
                         $order->get_id(),
                         $amount_str,
-                        $refund_data['refund_reason'],
+                        $refund_data['reason'],
                         $tx_to_use
                     ));
                     $result = $this->refund_braintree_transaction(
                         $order,
                         $amount_str,
-                        $refund_data['refund_reason'],
+                        $refund_data['reason'],
                         $tx_to_use
                     );
                     PFMP_Utils::log("🚦 Braintree refund result: " . print_r($result, true));
@@ -402,7 +415,7 @@ class PFMP_REST_Refunds {
                     $result = $this->refund_bluesnap_transaction(
                         $order,
                         $amount_str,
-                        $refund_data['refund_reason'],
+                        $refund_data['reason'],
                         $tx_to_use
                     );
                     PFMP_Utils::log("🟦 BlueSnap refund (placeholder) result: " . print_r($result, true));
@@ -420,7 +433,7 @@ class PFMP_REST_Refunds {
                     $result = $this->refund_afterpay_transaction(
                         $order,
                         $amount_str,
-                        $refund_data['refund_reason'],
+                        $refund_data['reason'],
                         $tx_to_use
                     );
                     PFMP_Utils::log("🟩 Afterpay refund (placeholder) result: " . print_r($result, true));
@@ -438,7 +451,7 @@ class PFMP_REST_Refunds {
                         $order->add_order_note(sprintf(
                             '🧾 WooCommerce refund skipped (terminal-only refund). By %s.%s',
                             $admin_name,
-                            !empty($refund_data['refund_reason']) ? ' Reason: ' . $refund_data['refund_reason'] : ''
+                            !empty($refund_data['reason']) ? ' Reason: ' . $refund_data['reason'] : ''
                         ));
                         $order->save();
                         PFMP_Utils::log_admin_action('refund_woocommerce_skipped', 'order', "WooCommerce refund skipped for order #{$order->get_id()} (terminal-only).");
@@ -469,15 +482,12 @@ class PFMP_REST_Refunds {
 
                 $refund = wc_create_refund($refund_data);
 
-                PFMP_Utils::log_admin_action('refund', 'order', "Created refund #{$refund->get_id()} on order #{$order_id} ({$refund_data['amount']})");
-
                 if (!is_wp_error($refund)) {
-                    $refund->set_reason($refund_data['refund_reason']);
-                    $refund->save();
+                    PFMP_Utils::log_admin_action('refund', 'order', "Created refund #{$refund->get_id()} on order #{$order_id} ({$refund_data['amount']})");
 
                     // (do not modify refund timestamps; keep Woo default behavior)
 
-                    $order->add_order_note('Refund created: ' . $refund_data['refund_reason']);
+                    $order->add_order_note('Refund created: ' . $refund_data['reason']);
                     $order->save();
                     $refund_ids[] = $refund->get_id();
                 } else {
@@ -1034,5 +1044,158 @@ class PFMP_REST_Refunds {
         }
 
         return is_array($json) ? $json : ['raw' => $body, 'status' => $code];
+    }
+
+    /**
+     * Refund an order via store credits.
+     *
+     * No WC refund object is created. Credits are issued directly to the customer.
+     * Order status is flipped to "refunded" when the cumulative credited amount
+     * (tracked in _pfm_credit_refund_total) covers the full remaining order balance.
+     *
+     * Meta written to the order:
+     *   _pfm_credit_refund_total          — running USD total credited back
+     *   _pfm_sc_refunded                  — blocks restore_credits_on_refund if a
+     *                                        gateway refund is ever created later
+     *   _pfm_sc_original_credits_restored — prevents double-restoring checkout
+     *                                        credits on subsequent partial calls
+     */
+    public function refund_order_via_store_credits(WP_REST_Request $request) {
+        try {
+            $order_id = absint($request['id']);
+            $amount   = floatval($request->get_param('amount'));
+            $reason   = sanitize_textarea_field($request->get_param('reason') ?? '');
+
+            if ($amount <= 0) {
+                return new WP_Error('invalid_amount', 'Amount must be greater than 0.', ['status' => 400]);
+            }
+
+            $order = wc_get_order($order_id);
+            if (!$order) {
+                return new WP_Error('invalid_order', 'Order not found.', ['status' => 404]);
+            }
+
+            $user_id = $order->get_user_id();
+            if (!$user_id) {
+                return new WP_Error('no_customer', 'Order has no associated customer.', ['status' => 400]);
+            }
+
+            if (!class_exists('PFM_SC_Credits')) {
+                return new WP_Error('plugin_missing', 'PFM Store Credits plugin is not active.', ['status' => 500]);
+            }
+
+            // ── Budget cap ─────────────────────────────────────────────────────────
+            $order_total          = (float) $order->get_total();
+            $gateway_refunded     = (float) $order->get_total_refunded();
+            $credit_refunded      = (float) $order->get_meta('_pfm_credit_refund_total');
+            $remaining_creditable = max(0.0, $order_total - $gateway_refunded - $credit_refunded);
+
+            if ($remaining_creditable <= 0.001) {
+                return new WP_Error('already_refunded', 'This order has no remaining balance to refund via store credits.', ['status' => 400]);
+            }
+
+            if ($amount > $remaining_creditable + 0.01) {
+                return new WP_Error(
+                    'amount_exceeds_remaining',
+                    sprintf(
+                        'Amount (%s) exceeds the remaining creditable balance (%s).',
+                        wc_price($amount, ['currency' => $order->get_currency()]),
+                        wc_price($remaining_creditable, ['currency' => $order->get_currency()])
+                    ),
+                    ['status' => 400]
+                );
+            }
+
+            $amount = min($amount, $remaining_creditable);
+
+            // ── Suppress restore_credits_on_refund for any future gateway refund ──
+            $order->update_meta_data('_pfm_sc_refunded', true);
+
+            // ── Restore original checkout credits (once per order) ─────────────────
+            $credits_used_usd = (float) $order->get_meta('_pfm_sc_used_usd');
+            if ($credits_used_usd > 0 && !$order->get_meta('_pfm_sc_original_credits_restored')) {
+                PFM_SC_Credits::add_credits(
+                    $user_id,
+                    $credits_used_usd,
+                    sprintf('Checkout credits restored — Order #%s (credit refund)', $order->get_order_number())
+                );
+                $order->update_meta_data('_pfm_sc_original_credits_restored', true);
+            }
+
+            // ── Issue the credit refund amount ─────────────────────────────────────
+            $note_text  = $reason ? sprintf('%s — ', $reason) : '';
+            $new_balance = PFM_SC_Credits::add_credits(
+                $user_id,
+                $amount,
+                sprintf('%sCredit refund for Order #%s', $note_text, $order->get_order_number())
+            );
+
+            // ── Update running total + history ─────────────────────────────────────
+            $credit_refunded += $amount;
+            $order->update_meta_data('_pfm_credit_refund_total', $credit_refunded);
+
+            $credit_refund_history = $order->get_meta('_pfm_credit_refund_history') ?: [];
+            if (!is_array($credit_refund_history)) $credit_refund_history = [];
+            $credit_refund_history[] = [
+                'date'   => current_time('mysql'),
+                'amount' => $amount,
+                'reason' => $reason,
+                'by'     => $admin_name,
+            ];
+            $order->update_meta_data('_pfm_credit_refund_history', $credit_refund_history);
+
+            // ── Order note ─────────────────────────────────────────────────────────
+            $current_user = wp_get_current_user();
+            $admin_name   = $current_user->display_name ?: 'Admin';
+            $order->add_order_note(sprintf(
+                'Refunded %s via store credits. By %s.%s New credit balance: %s.',
+                wc_price($amount, ['currency' => $order->get_currency()]),
+                $admin_name,
+                $reason ? ' Reason: ' . $reason . '.' : '',
+                wc_price($new_balance, ['currency' => 'USD'])
+            ));
+
+            // ── Flip to refunded when fully covered ────────────────────────────────
+            $is_fully_refunded = ($credit_refunded + $gateway_refunded) >= ($order_total - 0.01);
+            if ($is_fully_refunded) {
+                $order->update_status('refunded', 'Order fully refunded via store credits.');
+            }
+
+            $order->save();
+
+            // ── Klaviyo event ──────────────────────────────────────────────────────
+            do_action(
+                'pfm_sc_admin_credits_adjusted',
+                $user_id,
+                $amount,
+                'refund_via_credits',
+                $reason,
+                $new_balance
+            );
+
+            PFMP_Utils::log_admin_action(
+                'refund_via_credits',
+                'order',
+                sprintf(
+                    'Credit refund of %s for order #%d (user #%d). Running total: %s. Fully refunded: %s.',
+                    $amount,
+                    $order_id,
+                    $user_id,
+                    $credit_refunded,
+                    $is_fully_refunded ? 'yes' : 'no'
+                )
+            );
+
+            return rest_ensure_response([
+                'success'              => true,
+                'new_balance'          => $new_balance,
+                'credit_refunded'      => $credit_refunded,
+                'remaining_creditable' => max(0.0, $order_total - $gateway_refunded - $credit_refunded),
+                'fully_refunded'       => $is_fully_refunded,
+            ]);
+
+        } catch (Throwable $e) {
+            return new WP_Error('server_error', 'Unexpected error: ' . $e->getMessage(), ['status' => 500]);
+        }
     }
 }

@@ -70,6 +70,15 @@ class PFMP_REST_Replacements {
             'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
         ]);
 
+        register_rest_route('pfm-panel/v1', '/replacements/(?P<id>\d+)/resend-email', [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => [$this, 'resend_replacement_email'],
+            'permission_callback' => ['PFMP_Utils', 'can_access_pfm_panel'],
+            'args'                => [
+                'type' => ['sanitize_callback' => 'sanitize_text_field'],
+            ],
+        ]);
+
         register_rest_route('pfm-panel/v1', '/replacements', [
             'methods'  => WP_REST_Server::CREATABLE,
             'callback' => [$this, 'create_replacement'],
@@ -1020,5 +1029,38 @@ class PFMP_REST_Replacements {
             ],
             'meta_data' => method_exists($order, 'get_meta_data') ? $order->get_meta_data() : [],
         ];
+    }
+
+    public function resend_replacement_email(WP_REST_Request $request) {
+        $replacement_id = absint($request['id']);
+        $type           = $request->get_param('type') ?: 'processing';
+
+        $replacement = wro_get_order($replacement_id);
+        if (! $replacement) {
+            return new WP_Error('not_found', 'Replacement not found', ['status' => 404]);
+        }
+
+        $current_user = wp_get_current_user();
+        $admin_name   = $current_user->display_name ?: 'Admin';
+
+        try {
+            $result = wro_send_replacement_email($replacement_id, $type);
+
+            if ($result !== true) {
+                return new WP_Error('email_send_failed', is_string($result) ? $result : 'Unknown error', ['status' => 500]);
+            }
+
+            $replacement->add_note(sprintf(
+                "📧 Resent '%s' email to customer by %s via PFM Panel.",
+                $type,
+                $admin_name
+            ));
+            $replacement->save();
+            PFMP_Utils::log_admin_action('email_resend', 'replacement', "Resent '{$type}' email for replacement #{$replacement_id}");
+
+            return rest_ensure_response(['success' => true, 'type' => $type]);
+        } catch (Throwable $e) {
+            return new WP_Error('email_send_failed', $e->getMessage(), ['status' => 500]);
+        }
     }
 }

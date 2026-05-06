@@ -59,7 +59,13 @@ const router = createRouter({
 
 router.beforeEach((to) => {
     if (to.name === "login") return true;
-    if (isExternalServer() && !getStoredUser()) return { name: "login" };
+    if (!isExternalServer()) return true;
+    const user = getStoredUser();
+    if (!user?.token) return { name: "login" };
+    if (user.exp && user.exp < Math.floor(Date.now() / 1000)) {
+        localStorage.removeItem("pfm_panel_user");
+        return { name: "login" };
+    }
 });
 
 if (typeof window.PFMPanelData === "undefined") {

@@ -38,9 +38,7 @@ class PFMP_Utils {
     public static function can_access_pfm_panel() {
         $remote_ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
         $whitelisted_ips = [
-            '199.203.127.85',
-            '77.127.100.144',
-            '176.229.156.94'
+            ''
         ];
 
         $result = false;
@@ -59,6 +57,19 @@ class PFMP_Utils {
             }
         } else {
             //$reason = 'Not logged in and IP not whitelisted';
+        }
+
+        // JWT Bearer token check (external server requests)
+        if (!$result) {
+            $auth_header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+            if (str_starts_with($auth_header, 'Bearer ')) {
+                $token = substr($auth_header, 7);
+                $user  = PFMP_Rest_Auth::validate_token($token);
+                if ($user && (user_can($user, 'access_pfm_panel') || user_can($user, 'manage_woocommerce'))) {
+                    wp_set_current_user($user->ID);
+                    $result = true;
+                }
+            }
         }
 
         // Log attempt
