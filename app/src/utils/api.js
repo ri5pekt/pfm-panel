@@ -69,7 +69,7 @@ export async function request({
         method,
         headers: finalHeaders,
         body: body ? JSON.stringify(body) : undefined,
-        credentials: "include",
+        credentials: isExternal ? "omit" : "include",
     });
 
     // Read once; reuse for both success/error
