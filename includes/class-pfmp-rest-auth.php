@@ -7,6 +7,31 @@ class PFMP_Rest_Auth {
     public function __construct() {
         add_action('init', [$this, 'handle_cors'], 1);
         add_action('init', [$this, 'handle_sso']);
+        add_filter('rest_authentication_errors', [$this, 'authenticate_bearer'], 20);
+    }
+
+    // -------------------------------------------------------------------------
+    // Bearer token auth — overrides WordPress cookie check errors for
+    // cross-origin requests from the external panel domain.
+    // Priority 20 runs after rest_cookie_check_errors (priority 100 in WP core).
+    // -------------------------------------------------------------------------
+    public function authenticate_bearer($result) {
+        $auth_header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+        if (!str_starts_with($auth_header, 'Bearer ')) return $result;
+
+        $token = substr($auth_header, 7);
+        $user  = self::validate_token($token);
+
+        if (!$user) {
+            return new WP_Error('pfm_invalid_token', 'Invalid or expired token.', ['status' => 401]);
+        }
+
+        if (!user_can($user, 'access_pfm_panel') && !user_can($user, 'manage_woocommerce')) {
+            return new WP_Error('pfm_forbidden', 'Insufficient permissions.', ['status' => 403]);
+        }
+
+        wp_set_current_user($user->ID);
+        return true;
     }
 
     // -------------------------------------------------------------------------
