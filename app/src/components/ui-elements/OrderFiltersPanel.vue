@@ -199,6 +199,7 @@ const tagFilterOptions = [
     { label: "BAS Added", value: "bas-added" },
     { label: "Hotjar", value: "hotjar" },
     { label: "CS Added", value: "cs-added" },
+    { label: "BYOB", value: "byob" },
 ];
 
 // ✨ Add "Products" type

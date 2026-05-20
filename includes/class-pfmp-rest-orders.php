@@ -1531,32 +1531,46 @@ class PFMP_REST_Orders {
             $order->add_order_note("Order status changed to '{$params['status']}' by $admin_name");
         }
 
-        // Update meta
+        // Update meta — only log fields whose value actually changed
         if (isset($params['meta']) && is_array($params['meta'])) {
             foreach ($params['meta'] as $key => $value) {
-                $order->update_meta_data(sanitize_text_field($key), sanitize_text_field($value));
-                $updated_fields[] = "meta_{$key}";
-            }
-        }
-
-        // Billing updates
-        if (isset($params['billing']) && is_array($params['billing'])) {
-            foreach ($params['billing'] as $key => $value) {
-                $setter = "set_billing_" . $key;
-                if (method_exists($order, $setter)) {
-                    $order->$setter(sanitize_text_field($value));
-                    $updated_fields[] = "billing_{$key}";
+                $key   = sanitize_text_field($key);
+                $value = sanitize_text_field($value);
+                if ((string) $order->get_meta($key) !== $value) {
+                    $order->update_meta_data($key, $value);
+                    $updated_fields[] = "meta_{$key}";
                 }
             }
         }
 
-        // Shipping updates
+        // Billing updates — only log fields that actually changed
+        if (isset($params['billing']) && is_array($params['billing'])) {
+            foreach ($params['billing'] as $key => $value) {
+                $setter = "set_billing_" . $key;
+                $getter = "get_billing_" . $key;
+                if (method_exists($order, $setter)) {
+                    $new_val = sanitize_text_field($value);
+                    $old_val = method_exists($order, $getter) ? (string) $order->$getter() : null;
+                    if ($old_val === null || $old_val !== $new_val) {
+                        $order->$setter($new_val);
+                        $updated_fields[] = "billing_{$key}";
+                    }
+                }
+            }
+        }
+
+        // Shipping updates — only log fields that actually changed
         if (isset($params['shipping']) && is_array($params['shipping'])) {
             foreach ($params['shipping'] as $key => $value) {
                 $setter = "set_shipping_" . $key;
+                $getter = "get_shipping_" . $key;
                 if (method_exists($order, $setter)) {
-                    $order->$setter(sanitize_text_field($value));
-                    $updated_fields[] = "shipping_{$key}";
+                    $new_val = sanitize_text_field($value);
+                    $old_val = method_exists($order, $getter) ? (string) $order->$getter() : null;
+                    if ($old_val === null || $old_val !== $new_val) {
+                        $order->$setter($new_val);
+                        $updated_fields[] = "shipping_{$key}";
+                    }
                 }
             }
         }
@@ -1889,6 +1903,15 @@ class PFMP_REST_Orders {
         $date_from = $request['date_from'] ?? null;
         $date_to = $request['date_to'] ?? null;
 
+        // When no date range and no specific search is active, default to last 90 days.
+        // Without a date bound, HPOS COUNT(*) scans the full orders table (871K+ rows).
+        $has_specific_search = !empty($request['search_type']) || !empty($request['status'])
+            || !empty($request['warehouse']) || !empty($request['export_status'])
+            || !empty($request['addr_status']) || !empty($request['tag']);
+        if (!$date_from && !$date_to && !$has_specific_search) {
+            $date_from = date('Y-m-d', strtotime('-90 days'));
+        }
+
         if ($date_from || $date_to) {
             $from_timestamp = null;
             $to_timestamp = null;
@@ -2016,6 +2039,11 @@ class PFMP_REST_Orders {
                     'value'   => 0,
                     'compare' => '!=',
                     'type'    => 'NUMERIC',
+                ];
+            } elseif ($tag === 'byob') {
+                $meta_query[] = [
+                    'key'   => '_has_byob_bundle',
+                    'value' => '1',
                 ];
             }
         }

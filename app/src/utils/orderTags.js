@@ -19,6 +19,7 @@ export function getSpecialTags(row) {
     const upsellAmount = parseFloat(getMetaValue(row, "_upsell_amount")) || 0;
     const hotjarUrl = getMetaValue(row, "_hotjar_last_recording_url") || null;
     const cartSidebarTotal = parseFloat(getMetaValue(row, "_ref-cart-sidebar-total-usd")) || 0;
+    const hasByob = !!getMetaValue(row, "_has_byob_bundle");
 
     function makeTag(label, bgColor, options = {}) {
         const {
@@ -56,6 +57,7 @@ export function getSpecialTags(row) {
 
     if (ppuStatus === "on-hold") tags.push(makeTag("PPU on-hold", "#FFA500"));
     if (ppuProductsCount > 0) tags.push(makeTag("PPU Added", "#FF8C00"));
+    if (hasByob) tags.push(makeTag("BYOB", "#0891b2"));
     if (fbOrderId) tags.push(makeTag("Facebook", "#1877F2"));
     if (walmartOrderId) tags.push(makeTag("Walmart", "#ffc220"));
     if (hasRenewal) tags.push(makeTag("Sub Renewal", "#a259ff"));

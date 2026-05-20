@@ -201,3 +201,8 @@ export function isCartSlideUpsellLineItem(item) {
 export function isBundleAndSaveLineItem(item) {
     return hasLineItemMeta(item, "_bump_page", "cart");
 }
+
+export function isByobLineItem(item) {
+    if (!item || !Array.isArray(item.meta_data)) return false;
+    return item.meta_data.some((meta) => meta && meta.key === "_byob_bundle_id" && meta.value);
+}

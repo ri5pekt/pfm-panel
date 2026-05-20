@@ -820,6 +820,8 @@ class PFMP_REST_Replacements {
             $replacement->add_note("Replacement manually exported to {$warehouse_slug} by {$admin_name}.", $current_user->ID);
             $replacement->save();
 
+            do_action( 'wex_order_exported_to_warehouse', $replacement, $warehouse_slug );
+
             PFMP_Utils::log_admin_action(
                 'export',
                 'replacement',

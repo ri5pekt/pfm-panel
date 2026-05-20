@@ -1,9 +1,5 @@
 // api.js
 const API_URL = import.meta.env.VITE_WC_API_URL;
-const CONSUMER_KEY = import.meta.env.VITE_WC_CONSUMER_KEY;
-const CONSUMER_SECRET = import.meta.env.VITE_WC_CONSUMER_SECRET;
-
-export const authHeader = "Basic " + btoa(`${CONSUMER_KEY}:${CONSUMER_SECRET}`);
 
 function joinUrl(base, path) {
     const b = String(base || "").replace(/\/+$/, "");
@@ -14,17 +10,20 @@ function joinUrl(base, path) {
 }
 
 function getApiBase() {
+    // WP admin embed always injects PFMPanelData.restUrl
+    if (window?.PFMPanelData?.restUrl) return window.PFMPanelData.restUrl;
+    // Localhost dev: route through the Vite proxy (/wp-json → particleformen.com) to avoid CORS
     const isDev = location.hostname === "localhost" || location.hostname === "127.0.0.1";
-    // In WP admin we always have PFMPanelData.restUrl (rest_url('pfm-panel/v1/'))
-    if (!isDev && window?.PFMPanelData?.restUrl) return window.PFMPanelData.restUrl;
+    if (isDev) return "/wp-json/pfm-panel/v1";
+    // External panel (panel.pfm-qa.com): use the absolute URL from .env
     return API_URL;
 }
 
 export const apiBase = getApiBase();
 
 export function isExternalServer() {
-    const isDev = location.hostname === "localhost" || location.hostname === "127.0.0.1";
-    return !isDev && !window?.PFMPanelData?.nonce;
+    // External = no WP nonce injected; covers both localhost dev and panel.pfm-qa.com
+    return !window?.PFMPanelData?.nonce;
 }
 
 export async function request({
@@ -44,19 +43,16 @@ export async function request({
         if (qs) fullUrl += (fullUrl.includes("?") ? "&" : "?") + qs;
     }
 
-    const isDev = location.hostname === "localhost" || location.hostname === "127.0.0.1";
-    const isExternal = !isDev && !window?.PFMPanelData?.nonce;
+    const nonce = window?.PFMPanelData?.nonce;
 
     let authHeaders = {};
-    if (isDev) {
-        authHeaders = { Authorization: authHeader };
-    } else if (isExternal) {
+    if (nonce) {
+        authHeaders = { "X-WP-Nonce": nonce };
+    } else {
         const user = getStoredUser();
         if (user?.token) {
             authHeaders = { Authorization: `Bearer ${user.token}` };
         }
-    } else {
-        authHeaders = { "X-WP-Nonce": window?.PFMPanelData?.nonce || "" };
     }
 
     const finalHeaders = {
@@ -69,7 +65,7 @@ export async function request({
         method,
         headers: finalHeaders,
         body: body ? JSON.stringify(body) : undefined,
-        credentials: isExternal ? "omit" : "include",
+        credentials: nonce ? "include" : "omit",
     });
 
     // Read once; reuse for both success/error

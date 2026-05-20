@@ -337,6 +337,83 @@ const columns = computed(() => {
         },
 
         {
+            title: "Signifyd",
+            key: "signifyd_score",
+            width: 90,
+            render(row) {
+                const sigData = getMeta(row, "_pfm_signifyd");
+                const raw = sigData?.score;
+                if (raw == null || raw === "") {
+                    return h("span", { style: { color: "#d1d5db", fontSize: "12px" } }, "—");
+                }
+                const score = Math.max(0, Math.min(1000, Math.round(Number(raw))));
+                const hue = (score / 1000) * 120;
+                const bg     = `hsl(${hue}, 75%, 93%)`;
+                const color  = `hsl(${hue}, 70%, 32%)`;
+                const border = `1px solid hsl(${hue}, 65%, 78%)`;
+                const decision = (sigData?.decision || "").toUpperCase();
+                const isBlocked = decision === "REJECT";
+
+                const blockIcon = h("svg", {
+                    xmlns: "http://www.w3.org/2000/svg",
+                    viewBox: "0 0 24 24",
+                    width: "12",
+                    height: "12",
+                    fill: "#dc2626",
+                    style: { flexShrink: 0 },
+                    title: `Signifyd: ${decision}`,
+                }, [
+                    h("path", {
+                        d: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 5h2v6h-2V7zm0 8h2v2h-2v-2z",
+                    }),
+                ]);
+
+                // Use a "no entry" circle-slash icon for blocked
+                const blockedIcon = h("svg", {
+                    xmlns: "http://www.w3.org/2000/svg",
+                    viewBox: "0 0 24 24",
+                    width: "13",
+                    height: "13",
+                    fill: "#dc2626",
+                    style: { flexShrink: 0 },
+                }, [
+                    h("path", {
+                        d: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM4 12c0-4.42 3.58-8 8-8 1.85 0 3.55.63 4.9 1.68L5.68 16.9C4.63 15.55 4 13.85 4 12zm8 8c-1.85 0-3.55-.63-4.9-1.68l11.22-11.22C19.37 8.45 20 10.15 20 12c0 4.42-3.58 8-8 8z",
+                    }),
+                ]);
+
+                const badge = h("span", {
+                    style: {
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        padding: "1px 7px",
+                        borderRadius: "10px",
+                        fontSize: "11px",
+                        fontWeight: "bold",
+                        backgroundColor: bg,
+                        color,
+                        border,
+                        whiteSpace: "nowrap",
+                    },
+                }, [
+                    ...(isBlocked ? [blockedIcon] : []),
+                    String(score),
+                ]);
+
+                const tooltipText = `Signifyd Score: ${score} / 1000${decision ? ` · ${decision}` : ""}`;
+
+                return h(NTooltip,
+                    { trigger: "hover", placement: "top" },
+                    {
+                        trigger: () => badge,
+                        default: () => tooltipText,
+                    }
+                );
+            },
+        },
+
+        {
             title: "Date",
             key: "date_created",
             render(row) {

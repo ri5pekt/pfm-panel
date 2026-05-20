@@ -81,6 +81,14 @@
                                             >
                                                 CS
                                             </n-tag>
+                                            <n-tag
+                                                v-if="isByobLineItem(item)"
+                                                size="small"
+                                                style="--n-border: 1px solid #0891b2; color: #0891b2; background: #f0f9ff;"
+                                                bordered
+                                            >
+                                                BYOB
+                                            </n-tag>
                                         </n-space>
                                     </div>
                                     <small v-if="item.sku">SKU: {{ item.sku }}</small>
@@ -679,7 +687,7 @@ import { computed, ref } from "vue";
 import { useMessage, useDialog } from "naive-ui";
 import { formatCurrency, setCurrency } from "@/utils/utils";
 import { useRefund } from "@/composables/useRefund";
-import { isBundleAndSaveLineItem, isCartSlideUpsellLineItem } from "@/composables/useOrder";
+import { isBundleAndSaveLineItem, isCartSlideUpsellLineItem, isByobLineItem } from "@/composables/useOrder";
 import { useEdit } from "@/composables/useEdit";
 import { CloseCircleOutlined } from "@vicons/antd";
 import { formatOrderDate } from "@/utils/utils";

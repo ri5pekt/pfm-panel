@@ -396,4 +396,5 @@ final class PFMP_Query_Utils {
             'total' => $total,
         ];
     }
+
 }

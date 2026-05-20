@@ -787,16 +787,25 @@ async function saveOrderInfo() {
 
     const payload = {
         status: editableOrderInfo.value.status,
-        meta: {
-            new_or_returning: editableOrderInfo.value.newOrReturning,
-            replacement_reason: editableOrderInfo.value.replacementReason,
-            chargeback_alert_received: editableOrderInfo.value.chargebackAlert,
-        },
     };
 
+    // Only include meta fields that actually changed
+    const meta = {};
+    if (editableOrderInfo.value.newOrReturning !== (props.getMeta?.("new_or_returning") || "")) {
+        meta.new_or_returning = editableOrderInfo.value.newOrReturning;
+    }
+    if (editableOrderInfo.value.replacementReason !== (props.getMeta?.("replacement_reason") || "")) {
+        meta.replacement_reason = editableOrderInfo.value.replacementReason;
+    }
+    if (editableOrderInfo.value.chargebackAlert !== (props.getMeta?.("chargeback_alert_received") || "no")) {
+        meta.chargeback_alert_received = editableOrderInfo.value.chargebackAlert;
+    }
     const metaKey = editableOrderInfo.value.newMetaKey?.trim();
     if (metaKey) {
-        payload.meta[metaKey] = editableOrderInfo.value.newMetaValue ?? "";
+        meta[metaKey] = editableOrderInfo.value.newMetaValue ?? "";
+    }
+    if (Object.keys(meta).length > 0) {
+        payload.meta = meta;
     }
 
     try {
